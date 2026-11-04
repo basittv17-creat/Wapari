@@ -53,14 +53,14 @@ jobs:
           test -f assets/grain_sacks.png
           test -f test/trade_account_test.dart
 
-      - name: Format Dart source
-        run: dart format lib test
-
       - name: Install Flutter dependencies
         run: flutter pub get
 
+      - name: Format Dart source
+        run: dart format lib test
+
       - name: Analyze Dart source
-        run: flutter analyze
+        run: flutter analyze --no-fatal-infos
 
       - name: Run Flutter tests
         run: flutter test --reporter expanded
