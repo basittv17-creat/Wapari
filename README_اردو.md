@@ -1,6 +1,6 @@
 # واپاری (Wapari) — مکمل سورس کوڈ
 
-واپاری اجناس اور غلہ کے تاجروں کے لیے آف لائن اکاؤنٹ بک ایپ ہے۔ بنیادی ایپ Flutter اور Dart میں ہے۔ اکاؤنٹس موبائل/براؤزر کے مقامی اسٹوریج میں محفوظ ہوتے ہیں۔ SMS اور WhatsApp کے لیے ایپ صرف تیار شدہ پیغام کھولتی ہے؛ صارف خود آخری Send بٹن دبا کر پیغام بھیجتا ہے۔
+واپاری اجناس اور غلہ کے تاجروں کے لیے آف لائن اکاؤنٹ بک ایپ ہے۔ بنیادی ایپ Flutter اور Dart میں ہے۔ اکاؤنٹس موبائل کے مقامی اسٹوریج میں محفوظ ہوتے ہیں۔ SMS اور WhatsApp کے لیے ایپ صرف تیار شدہ پیغام کھولتی ہے؛ صارف خود آخری Send بٹن دبا کر پیغام بھیجتا ہے۔
 
 ## شامل فیچرز
 
@@ -14,44 +14,31 @@
 - کھاتے کی مکمل تفصیل، اختیاری SMS/WhatsApp چیک باکس اور Save
 - رپورٹس، اجناس وار وزن، JSON بیک اپ کاپی
 
-## ویب پری ویو
+## ویب پری ویو (صرف الگ UI حوالہ)
 
-فوری UI ٹیسٹ کے لیے `web_preview/index.html` کھولیں۔ یہ الگ HTML/CSS/JavaScript پری ویو ہے اور براؤزر کے `localStorage` میں کھاتے محفوظ کرتا ہے۔ موبائل پر اسے کھولنے سے SMS/WhatsApp ڈیپ لنکس دستیاب ڈیوائس کے مطابق کام کر سکتے ہیں۔
+`web_preview/` میں ایک الگ HTML/CSS/JavaScript پری ویو موجود ہے۔ یہ GitHub Actions کے Android build کا حصہ نہیں ہے اور اس workflow میں ویب build نہیں چلتا۔
 
-لوکل سرور چلانے کے لیے:
-
-```bash
-cd web_preview
-python3 -m http.server 8080
-```
-
-پھر براؤزر میں `http://localhost:8080` کھولیں۔
-
-## Flutter پروجیکٹ چلانا
+## Android APK بنانا
 
 Flutter SDK انسٹال ہونے کے بعد پروجیکٹ فولڈر میں:
 
 ```bash
-flutter create --project-name wapari --platforms=android,web --org com.wapari.app /tmp/wapari_scaffold
+flutter create --project-name wapari --platforms=android --org com.wapari.app /tmp/wapari_scaffold
 cp -R /tmp/wapari_scaffold/android ./android
-cp -R /tmp/wapari_scaffold/web ./web
 flutter pub get
-flutter run -d chrome
-```
-
-## ریلیز بنانا
-
-```bash
-flutter build web --release
+flutter analyze
+flutter test
 flutter build apk --release
-flutter build appbundle --release
 ```
 
-ویب آؤٹ پٹ `build/web/`، APK `build/app/outputs/flutter-apk/app-release.apk` اور AAB `build/app/outputs/bundle/release/app-release.aab` میں ملیں گے۔
+## GitHub Actions سے APK ZIP حاصل کرنا
 
-## Termux / GitHub Actions
+`.github/workflows/build.yml` صرف Android کا release APK بناتا ہے، پھر اسی APK کو `wapari-apk.zip` میں پیک کرکے GitHub Actions کے **Artifacts** میں `wapari-apk` کے نام سے محفوظ کرتا ہے۔
 
-اس سورس میں `.github/workflows/build.yml` شامل ہے۔ GitHub پر `main` برانچ میں push یا Actions کو دستی طور پر چلانے سے CI پلیٹ فارم فولڈرز بنائے گا، `flutter analyze`، ٹیسٹ، Web، APK اور AAB build چلائے گا۔
+- APK: `build/app/outputs/flutter-apk/app-release.apk`
+- Download ZIP: `dist/wapari-apk.zip` (Actions artifact میں)
+
+اس workflow میں **AAB build نہیں ہوتا** اور **Flutter Web build نہیں ہوتا**۔ Artifact ZIP کے اندر صرف APK فائل ہوتی ہے۔
 
 ## ڈیٹا اور بیک اپ
 
@@ -71,4 +58,4 @@ Flutter ایپ `shared_preferences` کے ذریعے ہر ڈیوائس کے مق�
 
 ## Build verification
 
-اس سورس پیکج میں Flutter SDK موجود نہیں تھا، اس لیے اس ماحول میں اصل Flutter Web/APK/AAB build چلانا ممکن نہیں ہوا۔ JavaScript ویب پری ویو کی syntax چیک کی گئی ہے؛ اصل Flutter build اور tests کو Flutter SDK یا شامل GitHub Actions پر چلانا ضروری ہے۔
+اصل Flutter build اور tests GitHub Actions پر چلتے ہیں۔ کامیابی کی تصدیق صرف اسی وقت ہوگی جب Actions run کامیابی سے مکمل ہو اور `wapari-apk` artifact دستیاب ہو۔
