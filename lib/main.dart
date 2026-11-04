@@ -816,41 +816,89 @@ class CommodityPicker extends StatefulWidget {
 
 class _CommodityPickerState extends State<CommodityPicker> {
   String query = '';
+
   @override
   Widget build(BuildContext context) {
-    final filtered = commodities.where((e) => '${e.ur} ${e.en} ${e.hi} ${e.zh}'.toLowerCase().contains(query.toLowerCase())).toList();
-                return InkWell(
-                  onTap: () => Navigator.pop(context, c.key),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: selected ? const Color(0xFFE3F0D4) : kPaper,
-                      borderRadius: BorderRadius.circular(15),
-                      border: Border.all(
-                        color: selected ? kGreen : const Color(0xFFD8C49A),
-                        width: selected ? 2 : 1,
-                      ),
-                      boxShadow: const [
-                        BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 3)),
-                      ],
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(c.emoji, style: const TextStyle(fontSize: 32)),
-                        const SizedBox(height: 5),
-                        Text(
-                          commodityLabel(c.key, widget.language),
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(fontWeight: FontWeight.w900, color: kDeepGreen),
-                        ),
-                        if (selected) const Icon(Icons.check_circle, color: kGreen, size: 18),
-                      ],
-                    ),
+    final filtered = commodities
+        .where((e) => '${e.ur} ${e.en} ${e.hi} ${e.zh}'.toLowerCase().contains(query.toLowerCase()))
+        .toList();
+
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: 16,
+          right: 16,
+          top: 16,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 14,
+        ),
+        child: SizedBox(
+          height: MediaQuery.of(context).size.height * .72,
+          child: Column(
+            children: [
+              Text(
+                Txt.get('choose_commodity', widget.language),
+                style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900, color: kDeepGreen),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                onChanged: (value) => setState(() => query = value),
+                decoration: InputDecoration(
+                  prefixIcon: const Icon(Icons.search),
+                  hintText: Txt.get('search', widget.language),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: GridView.builder(
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 3,
+                    childAspectRatio: 1.05,
+                    crossAxisSpacing: 10,
+                    mainAxisSpacing: 10,
                   ),
-                );
+                  itemCount: filtered.length,
+                  itemBuilder: (context, index) {
+                    final commodity = filtered[index];
+                    final selected = commodity.key == widget.selected;
+                    return InkWell(
+                      onTap: () => Navigator.pop(context, commodity.key),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: selected ? const Color(0xFFE3F0D4) : kPaper,
+                          borderRadius: BorderRadius.circular(15),
+                          border: Border.all(
+                            color: selected ? kGreen : const Color(0xFFD8C49A),
+                            width: selected ? 2 : 1,
+                          ),
+                          boxShadow: const [
+                            BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 3)),
+                          ],
+                        ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(commodity.emoji, style: const TextStyle(fontSize: 32)),
+                            const SizedBox(height: 5),
+                            Text(
+                              commodityLabel(commodity.key, widget.language),
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(fontWeight: FontWeight.w900, color: kDeepGreen),
+                            ),
+                            if (selected) const Icon(Icons.check_circle, color: kGreen, size: 18),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
-
 class _CalculationCard extends StatelessWidget {
   final String language;
   final double bagWeight, bagCount, bagTotal, extra, total, kgRate, maundRate, price;
