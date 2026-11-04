@@ -438,7 +438,42 @@ class _LanguageTile extends StatelessWidget {
   final VoidCallback onTap;
   const _LanguageTile({required this.label, required this.sub, required this.flag, required this.onTap});
   @override
-  Widget build(BuildContext context) => Padding(padding: const EdgeInsets.only(bottom: 12), child: Material(elevation: 7, borderRadius: BorderRadius.circular(18), child: InkWell(borderRadius: BorderRadius.circular(18), onTap: onTap, child: Container(padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15), decoration: BoxDecoration(color: kPaper, borderRadius: BorderRadius.circular(18), border: Border.all(color: kGold, width: 1.3)), child: Row(children: [Text(flag, style: const TextStyle(fontSize: 28)), const SizedBox(width: 16), Expanded(child: Text(label, style: const TextStyle(fontSize: 21, fontWeight: FontWeight.bold, color: kDeepGreen))), Text(sub, style: const TextStyle(color: Colors.black54)), const SizedBox(width: 8), const Icon(Icons.arrow_forward_ios_rounded, size: 17, color: kGreen)]))));
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Material(
+        elevation: 7,
+        borderRadius: BorderRadius.circular(18),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
+            decoration: BoxDecoration(
+              color: kPaper,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: kGold, width: 1.3),
+            ),
+            child: Row(
+              children: [
+                Text(flag, style: const TextStyle(fontSize: 28)),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: const TextStyle(fontSize: 21, fontWeight: FontWeight.bold, color: kDeepGreen),
+                  ),
+                ),
+                Text(sub, style: const TextStyle(color: Colors.black54)),
+                const SizedBox(width: 8),
+                const Icon(Icons.arrow_forward_ios_rounded, size: 17, color: kGreen),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class HomeShell extends StatefulWidget {
@@ -585,7 +620,75 @@ class _AccountsScreenState extends State<AccountsScreen> {
           if (accounts.isEmpty) return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [const Icon(Icons.folder_open_rounded, size: 58, color: Colors.black26), const SizedBox(height: 10), Text(Txt.get('no_accounts', lang), style: const TextStyle(color: Colors.black54, fontSize: 16))]));
           return RefreshIndicator(onRefresh: () async => _reload(), child: ListView.builder(padding: const EdgeInsets.fromLTRB(12, 0, 12, 16), itemCount: accounts.length, itemBuilder: (context, index) {
             final a = accounts[index];
-            return Padding(padding: const EdgeInsets.only(bottom: 10), child: Material(elevation: 4, borderRadius: BorderRadius.circular(18), child: InkWell(borderRadius: BorderRadius.circular(18), onTap: () async { await Navigator.push(context, MaterialPageRoute(builder: (_) => AccountDetailScreen(account: a, language: lang, alreadySaved: true))); _reload(); }, child: Container(padding: const EdgeInsets.all(13), decoration: BoxDecoration(color: kPaper, borderRadius: BorderRadius.circular(18), border: Border.all(color: const Color(0xFFD8C49A))), child: Row(children: [Container(width: 48, height: 48, decoration: BoxDecoration(shape: BoxShape.circle, gradient: const LinearGradient(colors: [Color(0xFFFFE9A8), Color(0xFFBD821A)]), border: Border.all(color: kGreen)), child: const Icon(Icons.person_rounded, color: kDeepGreen, size: 31)), const SizedBox(width: 11), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(a.name, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900, color: kInk)), if (a.fatherName.isNotEmpty) Text('${lang == 'ur' ? 'ولد: ' : 'Father: '}${a.fatherName}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: kGreen)), if (a.address.isNotEmpty) Text(a.address, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, color: Colors.black54)), const SizedBox(height: 5), Text('${commodityLabel(a.commodity, lang)}  •  ${money(a.totalWeight)} kg  •  Rs ${money(a.totalPrice)}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF8C5B0A)))])), const Icon(Icons.chevron_right_rounded, size: 28, color: kGreen)]))));
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Material(
+                elevation: 4,
+                borderRadius: BorderRadius.circular(18),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(18),
+                  onTap: () async {
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => AccountDetailScreen(
+                          account: a,
+                          language: lang,
+                          alreadySaved: true,
+                        ),
+                      ),
+                    );
+                    _reload();
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(13),
+                    decoration: BoxDecoration(
+                      color: kPaper,
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: const Color(0xFFD8C49A)),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFFFFE9A8), Color(0xFFBD821A)],
+                            ),
+                            border: Border.all(color: kGreen),
+                          ),
+                          child: const Icon(Icons.person_rounded, color: kDeepGreen, size: 31),
+                        ),
+                        const SizedBox(width: 11),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(a.name, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900, color: kInk)),
+                              if (a.fatherName.isNotEmpty)
+                                Text(
+                                  '${lang == 'ur' ? 'ولد: ' : 'Father: '}${a.fatherName}',
+                                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: kGreen),
+                                ),
+                              if (a.address.isNotEmpty)
+                                Text(a.address, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, color: Colors.black54)),
+                              const SizedBox(height: 5),
+                              Text(
+                                '${commodityLabel(a.commodity, lang)}  •  ${money(a.totalWeight)} kg  •  Rs ${money(a.totalPrice)}',
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF8C5B0A)),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(Icons.chevron_right_rounded, size: 28, color: kGreen),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
           }));
         }))
       ]),
@@ -645,7 +748,34 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
         _field(Txt.get('father', lang), _father),
         _field(Txt.get('address', lang), _address),
         _field(Txt.get('phone', lang), _phone, keyboard: TextInputType.phone),
-        InkWell(onTap: _chooseCommodity, borderRadius: BorderRadius.circular(14), child: Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 15), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFFD8C9A9))), child: Row(children: [const Text('🌾', style: TextStyle(fontSize: 25)), const SizedBox(width: 10), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(Txt.get('commodity', lang), style: const TextStyle(color: Colors.black54, fontSize: 12)), Text(commodityLabel(_commodity, lang), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 17, color: kDeepGreen))])), const Icon(Icons.keyboard_arrow_down_rounded, color: kGreen, size: 28)])),
+         InkWell(
+           onTap: _chooseCommodity,
+           borderRadius: BorderRadius.circular(14),
+           child: Container(
+             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 15),
+             decoration: BoxDecoration(
+               color: Colors.white,
+               borderRadius: BorderRadius.circular(14),
+               border: Border.all(color: const Color(0xFFD8C9A9)),
+             ),
+             child: Row(
+               children: [
+                 const Text('🌾', style: TextStyle(fontSize: 25)),
+                 const SizedBox(width: 10),
+                 Expanded(
+                   child: Column(
+                     crossAxisAlignment: CrossAxisAlignment.start,
+                     children: [
+                       Text(Txt.get('commodity', lang), style: const TextStyle(color: Colors.black54, fontSize: 12)),
+                       Text(commodityLabel(_commodity, lang), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 17, color: kDeepGreen)),
+                     ],
+                   ),
+                 ),
+                 const Icon(Icons.keyboard_arrow_down_rounded, color: kGreen, size: 28),
+               ],
+             ),
+           ),
+         ),
       ]),
       _formSection(Txt.get('bag_weight', lang), [
         _field(Txt.get('bag_weight', lang), _bagWeight, required: true, keyboard: const TextInputType.numberWithOptions(decimal: true)),
@@ -689,7 +819,35 @@ class _CommodityPickerState extends State<CommodityPicker> {
   @override
   Widget build(BuildContext context) {
     final filtered = commodities.where((e) => '${e.ur} ${e.en} ${e.hi} ${e.zh}'.toLowerCase().contains(query.toLowerCase())).toList();
-    return SafeArea(child: Padding(padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(context).viewInsets.bottom + 14), child: SizedBox(height: MediaQuery.of(context).size.height * .72, child: Column(children: [Text(Txt.get('choose_commodity', widget.language), style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900, color: kDeepGreen)), const SizedBox(height: 12), TextField(onChanged: (v) => setState(() => query = v), decoration: InputDecoration(prefixIcon: const Icon(Icons.search), hintText: Txt.get('search', widget.language))), const SizedBox(height: 12), Expanded(child: GridView.builder(gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, childAspectRatio: 1.05, crossAxisSpacing: 10, mainAxisSpacing: 10), itemCount: filtered.length, itemBuilder: (_, i) { final c = filtered[i]; final selected = c.key == widget.selected; return InkWell(onTap: () => Navigator.pop(context, c.key), child: Container decoration: BoxDecoration(color: selected ? const Color(0xFFE3F0D4) : kPaper, borderRadius: BorderRadius.circular(15), border: Border.all(color: selected ? kGreen : const Color(0xFFD8C49A), width: selected ? 2 : 1), boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 3))]), child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Text(c.emoji, style: const TextStyle(fontSize: 32)), const SizedBox(height: 5), Text(commodityLabel(c.key, widget.language), textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w900, color: kDeepGreen)), if (selected) const Icon(Icons.check_circle, color: kGreen, size: 18)])); })), ]))));
+                return InkWell(
+                  onTap: () => Navigator.pop(context, c.key),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: selected ? const Color(0xFFE3F0D4) : kPaper,
+                      borderRadius: BorderRadius.circular(15),
+                      border: Border.all(
+                        color: selected ? kGreen : const Color(0xFFD8C49A),
+                        width: selected ? 2 : 1,
+                      ),
+                      boxShadow: const [
+                        BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 3)),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(c.emoji, style: const TextStyle(fontSize: 32)),
+                        const SizedBox(height: 5),
+                        Text(
+                          commodityLabel(c.key, widget.language),
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontWeight: FontWeight.w900, color: kDeepGreen),
+                        ),
+                        if (selected) const Icon(Icons.check_circle, color: kGreen, size: 18),
+                      ],
+                    ),
+                  ),
+                );
   }
 }
 
@@ -804,7 +962,39 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
       Container(padding: const EdgeInsets.all(13), decoration: BoxDecoration(color: kPaper, borderRadius: BorderRadius.circular(17), border: Border.all(color: const Color(0xFFD8C49A))), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [Text(Txt.get('send_optional', lang), style: const TextStyle(fontWeight: FontWeight.w800, color: kDeepGreen)), const SizedBox(height: 7), CheckboxListTile(contentPadding: EdgeInsets.zero, dense: true, value: _sms, onChanged: a.phone.isEmpty ? null : (v) => setState(() => _sms = v ?? false), title: Text(Txt.get('sms', lang)), secondary: const Icon(Icons.sms_rounded, color: Color(0xFF1477C9))), CheckboxListTile(contentPadding: EdgeInsets.zero, dense: true, value: _whatsapp, onChanged: a.phone.isEmpty ? null : (v) => setState(() => _whatsapp = v ?? false), title: Text(Txt.get('whatsapp', lang)), secondary: const Icon(Icons.chat_rounded, color: Color(0xFF179B55))), if (a.phone.isEmpty) Text(Txt.get('no_phone', lang), style: const TextStyle(color: Colors.redAccent, fontSize: 12))])),
       const SizedBox(height: 13),
       _GoldButton(icon: _saved || widget.alreadySaved ? Icons.check_circle_rounded : Icons.save_rounded, title: _saving ? '...' : (_saved || widget.alreadySaved ? (lang == 'ur' ? 'کھاتہ محفوظ ہے' : 'Account saved') : Txt.get('save_account', lang)), onTap: _saving ? null : _saveAndSend),
-      if (widget.alreadySaved) Padding(padding: const EdgeInsets.only(top: 8), child: OutlinedButton.icon(onPressed: () async { final yes = await showDialog<bool>(context: context, builder: (_) => AlertDialog(title: Text(Txt.get('delete', lang)), content: Text(Txt.get('delete_confirm', lang)), actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: Text(Txt.get('cancel', lang))), FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(Txt.get('confirm', lang))])); if (yes == true) { await LocalStore.deleteAccount(a.id); if (mounted) Navigator.pop(context); } }, icon: const Icon(Icons.delete_outline), label: Text(Txt.get('delete', lang)), style: OutlinedButton.styleFrom(foregroundColor: Colors.red))),
+       if (widget.alreadySaved)
+         Padding(
+           padding: const EdgeInsets.only(top: 8),
+           child: OutlinedButton.icon(
+             onPressed: () async {
+               final yes = await showDialog<bool>(
+                 context: context,
+                 builder: (_) => AlertDialog(
+                   title: Text(Txt.get('delete', lang)),
+                   content: Text(Txt.get('delete_confirm', lang)),
+                   actions: [
+                     TextButton(
+                       onPressed: () => Navigator.pop(context, false),
+                       child: Text(Txt.get('cancel', lang)),
+                     ),
+                     FilledButton(
+                       onPressed: () => Navigator.pop(context, true),
+                       child: Text(Txt.get('confirm', lang)),
+                     ),
+                   ],
+                 ),
+               );
+               if (yes == true) {
+                 await LocalStore.deleteAccount(a.id);
+                 if (!mounted) return;
+                 Navigator.pop(context);
+               }
+             },
+             icon: const Icon(Icons.delete_outline),
+             label: Text(Txt.get('delete', lang)),
+             style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
+           ),
+         ),
       const SizedBox(height: 30),
     ]),
   ));
