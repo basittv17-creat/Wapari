@@ -1,4 +1,4 @@
-name: Wapari Flutter CI
+name: Wapari Android APK
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  android-apk:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source
@@ -20,11 +20,10 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Generate Android and Web platform folders
+      - name: Generate Android platform
         run: |
-          flutter create --project-name wapari --platforms=android,web --org com.wapari.app /tmp/wapari_scaffold
+          flutter create --project-name wapari --platforms=android --org com.wapari.app /tmp/wapari_scaffold
           cp -R /tmp/wapari_scaffold/android ./android
-          cp -R /tmp/wapari_scaffold/web ./web
 
       - name: Install dependencies
         run: flutter pub get
@@ -35,21 +34,17 @@ jobs:
       - name: Run tests
         run: flutter test
 
-      - name: Build Flutter Web
-        run: flutter build web --release
-
-      - name: Build Android APK
+      - name: Build release APK only
         run: flutter build apk --release
 
-      - name: Build Android App Bundle
-        run: flutter build appbundle --release
+      - name: Package APK into ZIP
+        run: |
+          mkdir -p dist
+          zip -j dist/wapari-apk.zip build/app/outputs/flutter-apk/app-release.apk
 
-      - name: Upload build artifacts
+      - name: Upload APK ZIP artifact
         uses: actions/upload-artifact@v4
         with:
-          name: wapari-builds
-          path: |
-            build/web
-            build/app/outputs/flutter-apk/app-release.apk
-            build/app/outputs/bundle/release/app-release.aab
+          name: wapari-apk
+          path: dist/wapari-apk.zip
           if-no-files-found: error
