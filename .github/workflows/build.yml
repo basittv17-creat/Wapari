@@ -7,6 +7,11 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# ہر Run کا الگ concurrency group ہے؛ نئی Push پچھلے Build کو cancel نہیں کرے گی۔
+concurrency:
+  group: wapari-${{ github.workflow }}-${{ github.run_id }}
+  cancel-in-progress: false
+
 jobs:
   android-apk:
     runs-on: ubuntu-latest
