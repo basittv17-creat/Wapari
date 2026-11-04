@@ -1,0 +1,55 @@
+name: Wapari Flutter CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generate Android and Web platform folders
+        run: |
+          flutter create --project-name wapari --platforms=android,web --org com.wapari.app /tmp/wapari_scaffold
+          cp -R /tmp/wapari_scaffold/android ./android
+          cp -R /tmp/wapari_scaffold/web ./web
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze source
+        run: flutter analyze
+
+      - name: Run tests
+        run: flutter test
+
+      - name: Build Flutter Web
+        run: flutter build web --release
+
+      - name: Build Android APK
+        run: flutter build apk --release
+
+      - name: Build Android App Bundle
+        run: flutter build appbundle --release
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wapari-builds
+          path: |
+            build/web
+            build/app/outputs/flutter-apk/app-release.apk
+            build/app/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
