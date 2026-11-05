@@ -159,6 +159,27 @@ jobs:
           echo "Disk space after cleanup:"
           df -h /
 
+      # The emulator runner invokes sdkmanager once for the emulator package.
+      # Retry this network-sensitive download beforehand so a transient Google
+      # SDK repository failure does not abort the entire smoke test.
+      - name: Preinstall Android emulator with download retries
+        run: |
+          yes | sdkmanager --licenses >/dev/null
+          for attempt in 1 2 3 4; do
+            echo "Installing Android emulator package (attempt $attempt/4)..."
+            if sdkmanager --install emulator --channel=0 && test -x "$ANDROID_HOME/emulator/emulator"; then
+              echo "Android emulator package is installed."
+              exit 0
+            fi
+            if [ "$attempt" -lt 4 ]; then
+              delay=$((attempt * 20))
+              echo "SDK download failed; retrying in ${delay}s..."
+              sleep "$delay"
+            fi
+          done
+          echo "::error::Android emulator package could not be installed after 4 attempts."
+          exit 1
+
       - name: Android emulator launch and crash-log test
         uses: reactivecircus/android-emulator-runner@v2
         with:
