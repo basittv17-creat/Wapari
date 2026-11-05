@@ -86,6 +86,14 @@ jobs:
 
       # Cache downloaded Gradle dependencies across workflow runs. The key follows
       # the generated Android Gradle configuration and Dart dependency manifest.
+      - name: Add R8 keep rule for WorkManager Room database
+        run: |
+          cat > android/app/proguard-rules.pro <<'EOF'
+          # WorkManager loads its Room database implementation reflectively.
+          # Preserve the no-argument constructor when Flutter's release R8 shrinking is enabled.
+          -keep class * extends androidx.room.RoomDatabase { <init>(); }
+          EOF
+
       - name: Restore Gradle dependency cache
         uses: actions/cache/restore@v4
         with:
