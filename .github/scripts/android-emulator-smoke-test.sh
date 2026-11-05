@@ -35,7 +35,7 @@ else
   grep -F "$PACKAGE_ID" /tmp/wapari-crash-buffer.txt /tmp/wapari-main-buffer.txt > /tmp/wapari-app-logs.txt || true
 fi
 
-if grep -E -i "FATAL EXCEPTION|Fatal signal [0-9]+|Unhandled Exception|Exception caught by widgets library|E/flutter|am_crash|Process: $PACKAGE_ID|backtrace:|Failed to create an instance of androidx\\.work\\.impl\\.WorkDatabase|SQLiteException" /tmp/wapari-app-logs.txt >/dev/null; then
+if grep -E -i "FATAL EXCEPTION|Fatal signal [0-9]+|Unhandled Exception|Exception caught by widgets library|E/flutter|am_crash|Process: $PACKAGE_ID|backtrace:|Failed to create an instance of androidx\.work\.impl\\.WorkDatabase|SQLiteException" /tmp/wapari-app-logs.txt >/dev/null; then
   cp /tmp/wapari-app-logs.txt diagnostics/fatal-crash-logs.txt
   echo "::error::Fatal Wapari app error detected. Only app-process logs are included in the artifact."
   exit 1
