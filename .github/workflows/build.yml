@@ -144,27 +144,30 @@ jobs:
             adb logcat -c
             adb shell monkey -p "$PACKAGE_ID" -c android.intent.category.LAUNCHER 1
             sleep 15
-            adb logcat -d -v threadtime > diagnostics/android-runtime-logcat.txt
-            adb shell screencap -p /sdcard/wapari-startup.png
-            adb pull /sdcard/wapari-startup.png diagnostics/wapari-startup.png
-            if grep -E -i "FATAL EXCEPTION|Fatal signal [0-9]+|Unhandled Exception|Exception caught by widgets library|am_crash" diagnostics/android-runtime-logcat.txt; then
-              echo "::error::Wapari crashed during emulator startup. See android-runtime-diagnostics artifact."
-              exit 1
-            fi
-            if ! adb shell pidof "$PACKAGE_ID" >/dev/null; then
-              echo "::error::Wapari process is not running after launch. See android-runtime-diagnostics artifact."
-              exit 1
-            fi
-            echo "Wapari remained running after startup; no fatal crash markers found."
 
-      - name: Upload Android runtime diagnostics
+            # Read only Android's dedicated crash buffer. Never upload general logcat,
+            # screenshots, device details, or normal application logs.
+            adb logcat -b crash -d -v threadtime > /tmp/wapari-crash-buffer.txt
+            if grep -E -i "FATAL EXCEPTION|Fatal signal [0-9]+|am_crash|Process: .*, PID:|backtrace:" /tmp/wapari-crash-buffer.txt >/dev/null; then
+              cp /tmp/wapari-crash-buffer.txt diagnostics/fatal-crash-logs.txt
+              echo "::error::Fatal crash detected. Only crash-buffer entries are included in the diagnostics artifact."
+              exit 1
+            fi
+
+            if ! adb shell pidof "$PACKAGE_ID" >/dev/null; then
+              echo "::error::Wapari process is not running after launch, but no fatal entry was found in Android's crash buffer."
+              exit 1
+            fi
+            echo "Wapari remained running; no fatal crash entry was found."
+
+      - name: Upload fatal crash logs only
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: android-runtime-diagnostics
-          path: diagnostics/
-          if-no-files-found: warn
-          retention-days: 14
+          name: fatal-crash-logs
+          path: diagnostics/fatal-crash-logs.txt
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Verify and package APK
         run: |
