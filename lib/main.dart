@@ -12,6 +12,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'services/google_drive_backup.dart';
 import 'services/account_pdf_service.dart';
+import 'services/ad_consent_service.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -30,7 +31,6 @@ const bool kUseAdMobTestAds = bool.fromEnvironment('ADMOB_TEST_ADS', defaultValu
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  unawaited(MobileAds.instance.initialize());
   runApp(const WapariApp());
 }
 
@@ -48,7 +48,21 @@ class _WapariAppState extends State<WapariApp> {
   @override
   void initState() {
     super.initState();
+    AdConsentService.instance.addListener(_onAdConsentChanged);
     _loadLanguage();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      AdConsentService.instance.initialize();
+    });
+  }
+
+  void _onAdConsentChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    AdConsentService.instance.removeListener(_onAdConsentChanged);
+    super.dispose();
   }
 
   Future<void> _loadLanguage() async {
@@ -82,7 +96,7 @@ class _WapariAppState extends State<WapariApp> {
       debugShowCheckedModeBanner: false,
       theme: _theme(),
       builder: (context, child) {
-        final showBanner = !_showSplash && _language != null;
+        final showBanner = !_showSplash && _language != null && AdConsentService.instance.canRequestAds;
         return Column(
           children: [
             if (showBanner) const _TopBannerAd(),
@@ -2316,6 +2330,18 @@ class SettingsScreen extends StatelessWidget {
     _settingTile(context, Icons.swap_horiz_rounded, 'موبائل سے موبائل ٹرانسفر', 'QR / Wi-Fi', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MobileTransferScreen()))),
     _settingTile(context, Icons.cloud_sync_rounded, 'Google Drive Cloud Backup', 'Google', () => _openGoogleDriveBackup(context)),
     _settingTile(context, Icons.phone_android_rounded, Txt.get('saved_on_device', language), 'Offline', () {}),
+    AnimatedBuilder(
+      animation: AdConsentService.instance,
+      builder: (context, _) => AdConsentService.instance.privacyOptionsRequired
+          ? _settingTile(
+              context,
+              Icons.tune_rounded,
+              language == 'ur' ? 'اشتہارات کی پرائیویسی سیٹنگز' : language == 'hi' ? 'विज्ञापन गोपनीयता विकल्प' : language == 'zh' ? '广告隐私选项' : 'Ad privacy options',
+              'Google',
+              () => AdConsentService.instance.showPrivacyOptions(context),
+            )
+          : const SizedBox.shrink(),
+    ),
     _settingTile(context, Icons.privacy_tip_outlined, language == 'ur' ? 'پرائیویسی پالیسی' : language == 'hi' ? 'गोपनीयता नीति' : language == 'zh' ? '隐私政策' : 'Privacy Policy', 'Web', () async { final uri = Uri.parse(kWapariPrivacyPolicyUrl); if (!await launchUrl(uri, mode: LaunchMode.externalApplication) && context.mounted) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Privacy Policy نہیں کھل سکی۔'))); } }),
     _settingTile(context, Icons.info_outline_rounded, language == 'ur' ? 'ایپ کے بارے میں' : 'About Wapari', 'Version 1.0.0', () => showAboutDialog(context: context, applicationName: 'Wapari', applicationVersion: '1.0.0', applicationLegalese: 'Offline-first commodity account book.')),
   ])));
