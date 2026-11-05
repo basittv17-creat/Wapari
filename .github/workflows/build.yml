@@ -44,6 +44,25 @@ jobs:
           test -f android/app/build.gradle.kts -o -f android/app/build.gradle
           test -f android/gradle/wrapper/gradle-wrapper.properties
           test -f android/app/src/main/AndroidManifest.xml
+          python3 - <<'PY'
+          from pathlib import Path
+          manifest = Path("android/app/src/main/AndroidManifest.xml")
+          content = manifest.read_text()
+          marker = "<application"
+          start = content.find(marker)
+          if start < 0:
+              raise SystemExit("AndroidManifest.xml has no <application> element")
+          end = content.find(">", start)
+          if end < 0:
+              raise SystemExit("AndroidManifest.xml has a malformed <application> element")
+          metadata = '''
+                  <meta-data
+                      android:name="com.google.android.gms.ads.APPLICATION_ID"
+                      android:value="ca-app-pub-9214971554658897~1877169274" />'''
+          if "com.google.android.gms.ads.APPLICATION_ID" not in content:
+              content = content[:end + 1] + metadata + content[end + 1:]
+              manifest.write_text(content)
+          PY
 
       - name: Verify required project assets
         run: |
@@ -66,7 +85,7 @@ jobs:
         run: flutter test --reporter expanded
 
       - name: Build Android release APK only
-        run: flutter build apk --release
+        run: flutter build apk --release --dart-define=ADMOB_TEST_ADS=true
 
       - name: Verify and package APK
         run: |
