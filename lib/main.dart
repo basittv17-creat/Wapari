@@ -25,6 +25,7 @@ const Color kInk = Color(0xFF25231D);
 
 const String kWapariBannerAdUnitId = 'ca-app-pub-9214971554658897/3537947338';
 const String kGoogleTestBannerAdUnitId = 'ca-app-pub-3940256099942544/9214589741';
+const String kWapariPrivacyPolicyUrl = 'https://basittv17-creat.github.io/Wapari/';
 const bool kUseAdMobTestAds = bool.fromEnvironment('ADMOB_TEST_ADS', defaultValue: false);
 
 Future<void> main() async {
@@ -2315,6 +2316,7 @@ class SettingsScreen extends StatelessWidget {
     _settingTile(context, Icons.swap_horiz_rounded, 'موبائل سے موبائل ٹرانسفر', 'QR / Wi-Fi', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MobileTransferScreen()))),
     _settingTile(context, Icons.cloud_sync_rounded, 'Google Drive Cloud Backup', 'Google', () => _openGoogleDriveBackup(context)),
     _settingTile(context, Icons.phone_android_rounded, Txt.get('saved_on_device', language), 'Offline', () {}),
+    _settingTile(context, Icons.privacy_tip_outlined, language == 'ur' ? 'پرائیویسی پالیسی' : language == 'hi' ? 'गोपनीयता नीति' : language == 'zh' ? '隐私政策' : 'Privacy Policy', 'Web', () async { final uri = Uri.parse(kWapariPrivacyPolicyUrl); if (!await launchUrl(uri, mode: LaunchMode.externalApplication) && context.mounted) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Privacy Policy نہیں کھل سکی۔'))); } }),
     _settingTile(context, Icons.info_outline_rounded, language == 'ur' ? 'ایپ کے بارے میں' : 'About Wapari', 'Version 1.0.0', () => showAboutDialog(context: context, applicationName: 'Wapari', applicationVersion: '1.0.0', applicationLegalese: 'Offline-first commodity account book.')),
   ])));
 
