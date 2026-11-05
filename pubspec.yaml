@@ -8,6 +8,7 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.8
+  device_info_plus: ^11.5.0
   shared_preferences: ^2.5.3
   url_launcher: ^6.3.2
   google_mobile_ads: ^9.2.0
