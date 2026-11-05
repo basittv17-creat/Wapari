@@ -17,6 +17,8 @@ dependencies:
   mobile_scanner: ^7.1.3
   google_sign_in: ^7.2.0
   http: ^1.6.0
+  pdf: ^3.13.1
+  printing: ^5.15.1
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -26,6 +28,7 @@ flutter:
   assets:
     - assets/hero_farm.png
     - assets/grain_sacks.png
+    - assets/fonts/NotoSansEnglish.ttf
   fonts:
     - family: WapariUrdu
       fonts:

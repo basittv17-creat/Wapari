@@ -10,6 +10,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'services/google_drive_backup.dart';
+import 'services/account_pdf_service.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -692,20 +693,88 @@ class HomeShell extends StatefulWidget {
 }
 
 class _HomeShellState extends State<HomeShell> {
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   int _tab = 0;
   int _accountsRevision = 0;
   String get lang => widget.language;
+
+  void _selectTab(int index) {
+    setState(() {
+      _tab = index;
+      if (index == 1) _accountsRevision++;
+    });
+    _scaffoldKey.currentState?.closeDrawer();
+  }
+
+  Future<void> _openDailyReports() async {
+    _scaffoldKey.currentState?.closeDrawer();
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => DailyReportsScreen(language: lang)));
+  }
+
+  Future<void> _openMobileTransfer() async {
+    _scaffoldKey.currentState?.closeDrawer();
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => const MobileTransferScreen()));
+  }
+
+  Widget _drawerItem(IconData icon, String title, VoidCallback onTap) => ListTile(
+        leading: Icon(icon, color: kGreen),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+        trailing: const Icon(Icons.chevron_right_rounded),
+        onTap: onTap,
+      );
+
   @override
   Widget build(BuildContext context) {
     final pages = [
-      DashboardScreen(language: lang, onNew: _newAccount, onAccounts: () => setState(() => _tab = 1)),
+      DashboardScreen(language: lang, onNew: _newAccount, onAccounts: () => _selectTab(1), onMenu: () => _scaffoldKey.currentState?.openDrawer()),
       AccountsScreen(key: ValueKey(_accountsRevision), language: lang),
       ReportsScreen(language: lang),
       SettingsScreen(language: lang, onLanguageChanged: widget.onLanguageChanged),
     ];
+    final labels = lang == 'ur'
+        ? ['ہوم', 'تمام کھاتے', 'رپورٹس', 'روزانہ رپورٹ', 'موبائل ٹرانسفر', 'سیٹنگز']
+        : lang == 'hi'
+            ? ['होम', 'सभी खाते', 'रिपोर्ट', 'दैनिक रिपोर्ट', 'मोबाइल ट्रांसफर', 'सेटिंग्स']
+            : lang == 'zh'
+                ? ['首页', '全部账户', '报表', '每日报表', '手机转账', '设置']
+                : ['Home', 'All accounts', 'Reports', 'Daily reports', 'Mobile transfer', 'Settings'];
+
     return Directionality(
       textDirection: Txt.isRtl(lang) ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
+        key: _scaffoldKey,
+        drawer: Drawer(
+          backgroundColor: kCream,
+          child: SafeArea(
+            child: Column(
+              children: [
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(20, 25, 20, 22),
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(colors: [kDeepGreen, kGreen]),
+                    border: Border(bottom: BorderSide(color: kGold, width: 2)),
+                  ),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const Icon(Icons.agriculture_rounded, color: kGold, size: 42),
+                    const SizedBox(height: 8),
+                    Text('Wapari', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 23)),
+                    Text(Txt.get('tagline', lang), style: const TextStyle(color: Colors.white70)),
+                  ]),
+                ),
+                _drawerItem(Icons.home_rounded, labels[0], () => _selectTab(0)),
+                _drawerItem(Icons.inventory_2_rounded, labels[1], () => _selectTab(1)),
+                _drawerItem(Icons.bar_chart_rounded, labels[2], () => _selectTab(2)),
+                _drawerItem(Icons.today_rounded, labels[3], _openDailyReports),
+                _drawerItem(Icons.swap_horiz_rounded, labels[4], _openMobileTransfer),
+                _drawerItem(Icons.settings_rounded, labels[5], () => _selectTab(3)),
+                const Spacer(),
+                const Divider(),
+                Padding(padding: const EdgeInsets.all(12), child: Text('Wapari • Offline-first', style: TextStyle(color: Colors.black54, fontSize: 12))),
+              ],
+            ),
+          ),
+        ),
         body: IndexedStack(index: _tab, children: pages),
         bottomNavigationBar: Container(
           decoration: const BoxDecoration(color: kPaper, boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 12, offset: Offset(0, -3))]),
@@ -714,7 +783,7 @@ class _HomeShellState extends State<HomeShell> {
             selectedIndex: _tab,
             backgroundColor: kPaper,
             indicatorColor: const Color(0xFFDDEBCB),
-            onDestinationSelected: (i) => setState(() { _tab = i; if (i == 1) _accountsRevision++; }),
+            onDestinationSelected: _selectTab,
             destinations: [
               NavigationDestination(icon: const Icon(Icons.home_rounded), label: Txt.get('home', lang)),
               NavigationDestination(icon: const Icon(Icons.inventory_2_rounded), label: Txt.get('accounts', lang)),
@@ -735,11 +804,11 @@ class _HomeShellState extends State<HomeShell> {
 
 class DashboardScreen extends StatelessWidget {
   final String language;
-  final VoidCallback onNew, onAccounts;
-  const DashboardScreen({super.key, required this.language, required this.onNew, required this.onAccounts});
+  final VoidCallback onNew, onAccounts, onMenu;
+  const DashboardScreen({super.key, required this.language, required this.onNew, required this.onAccounts, required this.onMenu});
   @override
   Widget build(BuildContext context) => Directionality(textDirection: Txt.isRtl(language) ? TextDirection.rtl : TextDirection.ltr, child: Scaffold(
-        appBar: AppBar(title: Text('${Txt.get('app', language)} (Wapari)'), leading: const Padding(padding: EdgeInsets.all(12), child: Icon(Icons.menu_rounded)), actions: const [Padding(padding: EdgeInsets.symmetric(horizontal: 15), child: Icon(Icons.notifications_none_rounded))]),
+        appBar: AppBar(title: Text('${Txt.get('app', language)} (Wapari)'), leading: IconButton(onPressed: onMenu, tooltip: 'Menu', icon: const Icon(Icons.menu_rounded)), actions: const [Padding(padding: EdgeInsets.symmetric(horizontal: 15), child: Icon(Icons.notifications_none_rounded))]),
         body: ListView(padding: const EdgeInsets.all(15), children: [
           _HeroFarm(language: language),
           const SizedBox(height: 16),
@@ -1152,6 +1221,38 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
     return lines.join('\n');
   }
 
+  Future<void> _sharePdf() async {
+    try {
+      await AccountPdfService.share(
+        language: lang,
+        fields: {
+          'name': a.name,
+          'father': a.fatherName,
+          'address': a.address,
+          'phone': a.phone,
+          'commodity': commodityLabel(a.commodity, lang),
+          'bags': '${a.bagCount}',
+          'bagWeight': '${money(a.bagWeightKg)} kg',
+          'bagTotal': '${money(a.totalBagWeight)} kg',
+          'extra': '${money(a.extraKg)} kg',
+          'totalWeight': '${money(a.totalWeight)} kg',
+          'maunds': '${a.maunds}',
+          'remaining': '${money(a.remainingKg)} kg',
+          'kgRate': 'Rs ${money(a.kgRate)}',
+          'maundRate': 'Rs ${money(a.maundRate)}',
+          'totalPrice': 'Rs ${money(a.totalPrice)}',
+          'date': '${a.createdAt.toLocal()}',
+        },
+      );
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(lang == 'ur' ? 'PDF شیئر نہیں ہو سکی: $error' : 'Could not share PDF: $error')),
+        );
+      }
+    }
+  }
+
   Future<void> _saveAndSend() async {
     if (a.phone.trim().isEmpty && (_sms || _whatsapp)) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(Txt.get('select_phone', lang))));
@@ -1189,7 +1290,14 @@ class _AccountDetailScreenState extends State<AccountDetailScreen> {
 
   @override
   Widget build(BuildContext context) => Directionality(textDirection: Txt.isRtl(lang) ? TextDirection.rtl : TextDirection.ltr, child: Scaffold(
-    appBar: AppBar(title: Text(Txt.get('details', lang)), actions: [if (widget.alreadySaved) IconButton(onPressed: () async { await Clipboard.setData(ClipboardData(text: _message())); if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Copied'))); }, icon: const Icon(Icons.copy_rounded))]),
+    appBar: AppBar(title: Text(Txt.get('details', lang)), actions: [
+      IconButton(
+        tooltip: lang == 'ur' ? 'PDF شیئر کریں' : lang == 'hi' ? 'PDF साझा करें' : lang == 'zh' ? '分享 PDF' : 'Share PDF',
+        onPressed: _sharePdf,
+        icon: const Icon(Icons.picture_as_pdf_rounded),
+      ),
+      if (widget.alreadySaved) IconButton(onPressed: () async { await Clipboard.setData(ClipboardData(text: _message())); if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Copied'))); }, icon: const Icon(Icons.copy_rounded)),
+    ]),
     body: ListView(padding: const EdgeInsets.all(13), children: [
       Container(padding: const EdgeInsets.all(15), decoration: BoxDecoration(color: kPaper, borderRadius: BorderRadius.circular(19), border: Border.all(color: const Color(0xFFD6C193)), boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 7, offset: Offset(0, 4))]), child: Row(children: [Container(width: 55, height: 55, decoration: BoxDecoration(shape: BoxShape.circle, gradient: const LinearGradient(colors: [Color(0xFFFFE8A7), Color(0xFFB47A17)]), border: Border.all(color: kGreen, width: 2)), child: const Icon(Icons.person_rounded, color: kDeepGreen, size: 36)), const SizedBox(width: 12), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(a.name, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 21)), if (a.fatherName.isNotEmpty) Text('${lang == 'ur' ? 'ولد: ' : 'Father: '}${a.fatherName}', style: const TextStyle(color: kGreen, fontWeight: FontWeight.w800)), if (a.phone.isNotEmpty) Text('☎  ${a.phone}', style: const TextStyle(fontWeight: FontWeight.w700)), if (a.address.isNotEmpty) Text('📍  ${a.address}', style: const TextStyle(fontSize: 12, color: Colors.black54))])), const Text('🌾', style: TextStyle(fontSize: 30))])),
       const SizedBox(height: 12),
