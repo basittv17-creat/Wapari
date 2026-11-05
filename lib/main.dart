@@ -7,6 +7,7 @@ import 'package:nearby_connections/nearby_connections.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'services/google_drive_backup.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -1450,6 +1451,8 @@ class _MobileTransferScreenState extends State<MobileTransferScreen> {
       }
     }),
     _settingTile(context, Icons.swap_horiz_rounded, 'موبائل سے موبائل ٹرانسفر', 'QR / Wi-Fi', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MobileTransferScreen()))),
+    _settingTile(context, Icons.cloud_sync_rounded, 'Google Drive Cloud Backup', 'Google', () => _openGoogleDriveBackup(context)),
+
     _settingTile(context, Icons.phone_android_rounded, Txt.get('saved_on_device', language), 'Offline', () {}),
     _settingTile(context, Icons.info_outline_rounded, language == 'ur' ? 'ایپ کے بارے میں' : 'About Wapari', 'Version 1.0.0', () => showAboutDialog(context: context, applicationName: 'Wapari', applicationVersion: '1.0.0', applicationLegalese: 'Offline-first commodity account book.')),
   ])));
@@ -1583,6 +1586,39 @@ class _GoldButton extends StatelessWidget {
     ]),
   );
 }
+
+  Future<void> _openGoogleDriveBackup(BuildContext context) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: kCream,
+      builder: (sheetContext) => SafeArea(child: Wrap(children: [
+        ListTile(leading: const Icon(Icons.cloud_upload, color: kGreen), title: const Text('Google Drive پر Backup محفوظ کریں'), onTap: () => Navigator.pop(sheetContext, 'upload')),
+        ListTile(leading: const Icon(Icons.cloud_download, color: kGreen), title: const Text('Google Drive سے Backup Restore کریں'), onTap: () => Navigator.pop(sheetContext, 'restore')),
+      ])),
+    );
+    if (action == null || !context.mounted) return;
+    showDialog<void>(context: context, barrierDismissible: false, builder: (_) => const AlertDialog(content: Row(children: [CircularProgressIndicator(), SizedBox(width: 18), Expanded(child: Text('Google Drive سے رابطہ ہو رہا ہے...'))])));
+    try {
+      final service = GoogleDriveBackupService.instance;
+      if (action == 'upload') {
+        final result = await service.uploadBackup();
+        if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
+        if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Google Drive Backup محفوظ ہو گیا۔ File: $result')));
+      } else {
+        final raw = await service.downloadBackup();
+        if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
+        if (raw == null) {
+          if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Google Drive پر ابھی کوئی Wapari Backup موجود نہیں۔')));
+          return;
+        }
+        final result = await LocalStore.importBackup(raw);
+        if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Restore مکمل: نئے ${result.added}، اپ ڈیٹ ${result.updated}، بغیر تبدیلی ${result.unchanged}')));
+      }
+    } catch (e) {
+      if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Google Drive Backup ناکام: $e'), duration: const Duration(seconds: 7)));
+    }
+  }
 
 class SettingsScreen extends StatelessWidget {
   final String language;
