@@ -159,15 +159,29 @@ jobs:
           echo "Disk space after cleanup:"
           df -h /
 
-      # The emulator runner invokes sdkmanager once for the emulator package.
-      # Retry this network-sensitive download beforehand so a transient Google
-      # SDK repository failure does not abort the entire smoke test.
+      # Resolve sdkmanager from the Android SDK installation; setup-flutter does
+      # not guarantee that its cmdline-tools directory is on PATH.
+      # Retry the network-sensitive emulator download to tolerate transient SDK failures.
       - name: Preinstall Android emulator with download retries
         run: |
-          yes | sdkmanager --licenses >/dev/null
+          SDKMANAGER="$(command -v sdkmanager || true)"
+          if [ -z "$SDKMANAGER" ]; then
+            for candidate in "$ANDROID_HOME"/cmdline-tools/latest/bin/sdkmanager "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager "$ANDROID_HOME"/tools/bin/sdkmanager; do
+              if [ -x "$candidate" ]; then
+                SDKMANAGER="$candidate"
+                break
+              fi
+            done
+          fi
+          if [ -z "$SDKMANAGER" ]; then
+            echo "::error::Could not find sdkmanager under ANDROID_HOME=$ANDROID_HOME"
+            exit 1
+          fi
+          echo "Using Android SDK manager: $SDKMANAGER"
+          yes | "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --licenses >/dev/null
           for attempt in 1 2 3 4; do
             echo "Installing Android emulator package (attempt $attempt/4)..."
-            if sdkmanager --install emulator --channel=0 && test -x "$ANDROID_HOME/emulator/emulator"; then
+            if "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --install emulator --channel=0 && test -x "$ANDROID_HOME/emulator/emulator"; then
               echo "Android emulator package is installed."
               exit 0
             fi
