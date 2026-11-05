@@ -249,8 +249,110 @@ class TradeAccount {
       );
 }
 
+class MergeResult {
+  final int added;
+  final int updated;
+  final int unchanged;
+  final bool duplicateBatch;
+  const MergeResult({required this.added, required this.updated, required this.unchanged, this.duplicateBatch = false});
+}
+
 class LocalStore {
   static const String _accountsKey = 'wapari_accounts_v1';
+  static const String _mergeHistoryKey = 'wapari_merge_history_v1';
+  static const String _appliedBatchesKey = 'wapari_applied_batches_v1';
+
+  static Future<Map<String, dynamic>> exportBackup() async {
+    final accounts = await loadAccounts();
+    return {
+      'format': 'wapari-backup',
+      'version': 1,
+      'batchId': DateTime.now().microsecondsSinceEpoch.toString(),
+      'exportedAt': DateTime.now().toUtc().toIso8601String(),
+      'accounts': accounts.map((e) => e.toJson()).toList(),
+    };
+  }
+
+  static Future<MergeResult> importBackup(String raw) async {
+    final decoded = jsonDecode(raw);
+    if (decoded is! Map<String, dynamic> ||
+        decoded['format'] != 'wapari-backup' ||
+        decoded['version'] != 1 ||
+        decoded['accounts'] is! List) {
+      throw const FormatException('Invalid Wapari backup format');
+    }
+    final batchId = decoded['batchId'] as String?;
+    if (batchId == null || batchId.isEmpty) {
+      throw const FormatException('Backup batch ID is missing');
+    }
+    final prefs = await SharedPreferences.getInstance();
+    final applied = prefs.getStringList(_appliedBatchesKey) ?? <String>[];
+    if (applied.contains(batchId)) {
+      return const MergeResult(added: 0, updated: 0, unchanged: 0, duplicateBatch: true);
+    }
+
+    final incoming = (decoded['accounts'] as List)
+        .map((e) => TradeAccount.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+    if (incoming.any((e) => e.id.isEmpty) ||
+        incoming.map((e) => e.id).toSet().length != incoming.length) {
+      throw const FormatException('Backup contains invalid or duplicate account IDs');
+    }
+
+    final current = await loadAccounts();
+    final merged = List<TradeAccount>.from(current);
+    final history = prefs.getString(_mergeHistoryKey);
+    final historyItems = history == null || history.isEmpty
+        ? <Map<String, dynamic>>[]
+        : (jsonDecode(history) as List).cast<Map<String, dynamic>>();
+    var added = 0;
+    var updated = 0;
+    var unchanged = 0;
+
+    for (final account in incoming) {
+      final index = merged.indexWhere((e) => e.id == account.id);
+      if (index < 0) {
+        merged.add(account);
+        added++;
+      } else {
+        final previous = merged[index];
+        final oldJson = previous.toJson();
+        final newJson = account.toJson();
+        if (jsonEncode(oldJson) == jsonEncode(newJson)) {
+          unchanged++;
+        } else {
+          historyItems.add({
+            'accountId': account.id,
+            'accountName': account.name,
+            'changedAt': DateTime.now().toUtc().toIso8601String(),
+            'batchId': batchId,
+            'old': oldJson,
+            'new': newJson,
+          });
+          merged[index] = account;
+          updated++;
+        }
+      }
+    }
+
+    await _write(merged);
+    await prefs.setString(_mergeHistoryKey, jsonEncode(historyItems));
+    applied.add(batchId);
+    if (applied.length > 500) applied.removeRange(0, applied.length - 500);
+    await prefs.setStringList(_appliedBatchesKey, applied);
+    return MergeResult(added: added, updated: updated, unchanged: unchanged);
+  }
+
+  static Future<List<Map<String, dynamic>>> loadMergeHistory() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_mergeHistoryKey);
+    if (raw == null || raw.isEmpty) return [];
+    try {
+      return (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
+    } catch (_) {
+      return [];
+    }
+  }
   static Future<List<TradeAccount>> loadAccounts() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_accountsKey);
@@ -1173,7 +1275,63 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Directionality(textDirection: Txt.isRtl(language) ? TextDirection.rtl : TextDirection.ltr, child: Scaffold(appBar: AppBar(title: Text(Txt.get('settings', language))), body: ListView(padding: const EdgeInsets.all(14), children: [
     _settingTile(context, Icons.language_rounded, Txt.get('language', language), language.toUpperCase(), () => showModalBottomSheet(context: context, backgroundColor: kCream, builder: (_) => SafeArea(child: Padding(padding: const EdgeInsets.all(14), child: Column(mainAxisSize: MainAxisSize.min, children: [for (final x in [('ur', 'اردو'), ('hi', 'हिन्दी'), ('en', 'English'), ('zh', '中文')]) ListTile(leading: const Icon(Icons.translate_rounded, color: kGreen), title: Text(x.$2), trailing: language == x.$1 ? const Icon(Icons.check_circle, color: kGreen) : null, onTap: () { Navigator.pop(context); onLanguageChanged(x.$1); })]))))),
-    _settingTile(context, Icons.cloud_download_rounded, Txt.get('backup', language), 'JSON', () async { final raw = await LocalStore.exportJson(); await Clipboard.setData(ClipboardData(text: raw)); if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(Txt.get('backup_done', language)))); }),
+    _settingTile(context, Icons.cloud_download_rounded, Txt.get('backup', language), 'JSON', () async {
+      final action = await showModalBottomSheet<String>(
+        context: context,
+        backgroundColor: kCream,
+        builder: (sheetContext) => SafeArea(child: Wrap(children: [
+          ListTile(leading: const Icon(Icons.copy, color: kGreen), title: const Text('بیک اپ کاپی کریں / Copy backup'), onTap: () => Navigator.pop(sheetContext, 'export')),
+          ListTile(leading: const Icon(Icons.merge_type, color: kGreen), title: const Text('بیک اپ درآمد اور محفوظ Merge / Import backup'), onTap: () => Navigator.pop(sheetContext, 'import')),
+          ListTile(leading: const Icon(Icons.history, color: kGreen), title: const Text('Merge History'), onTap: () => Navigator.pop(sheetContext, 'history')),
+        ])),
+      );
+      if (action == 'export') {
+        final raw = const JsonEncoder.withIndent('  ').convert(await LocalStore.exportBackup());
+        await Clipboard.setData(ClipboardData(text: raw));
+        if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('بیک اپ کاپی ہو گیا')));
+      } else if (action == 'import') {
+        final controller = TextEditingController();
+        if (!context.mounted) return;
+        final raw = await showDialog<String>(context: context, builder: (dialogContext) => AlertDialog(
+          title: const Text('Import Wapari backup'),
+          content: TextField(controller: controller, minLines: 5, maxLines: 10, decoration: const InputDecoration(hintText: 'یہاں مکمل JSON بیک اپ پیسٹ کریں')),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.pop(dialogContext, controller.text), child: const Text('Continue')),
+          ],
+        ));
+        controller.dispose();
+        if (raw == null || raw.trim().isEmpty || !context.mounted) return;
+        try {
+          final result = await LocalStore.importBackup(raw);
+          if (!context.mounted) return;
+          final message = result.duplicateBatch
+              ? 'یہ بیک اپ پہلے درآمد ہو چکا ہے؛ کوئی ڈپلیکیٹ نہیں بنایا گیا۔'
+              : 'نئے: ${result.added}، اپ ڈیٹ: ${result.updated}، بغیر تبدیلی: ${result.unchanged}';
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), duration: const Duration(seconds: 5)));
+        } catch (error) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('بیک اپ درآمد نہیں ہو سکا: $error')));
+        }
+      } else if (action == 'history') {
+        if (!context.mounted) return;
+        final items = await LocalStore.loadMergeHistory();
+        if (!context.mounted) return;
+        await showDialog<void>(context: context, builder: (dialogContext) => AlertDialog(
+          title: const Text('Merge History'),
+          content: SizedBox(width: double.maxFinite, child: items.isEmpty
+              ? const Text('ابھی کوئی تبدیلی محفوظ نہیں ہوئی۔')
+              : ListView(shrinkWrap: true, children: items.reversed.take(50).map((item) {
+                  final oldValue = Map<String, dynamic>.from(item['old'] as Map);
+                  final newValue = Map<String, dynamic>.from(item['new'] as Map);
+                  return ListTile(
+                    title: Text('${item['accountName'] ?? 'Account'}'),
+                    subtitle: Text('بوریاں: ${oldValue['bagCount']} → ${newValue['bagCount']}\nوقت: ${item['changedAt']}'),
+                  );
+                }).toList())),
+          actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Close'))],
+        ));
+      }
+    }),
     _settingTile(context, Icons.phone_android_rounded, Txt.get('saved_on_device', language), 'Offline', () {}),
     _settingTile(context, Icons.info_outline_rounded, language == 'ur' ? 'ایپ کے بارے میں' : 'About Wapari', 'Version 1.0.0', () => showAboutDialog(context: context, applicationName: 'Wapari', applicationVersion: '1.0.0', applicationLegalese: 'Offline-first commodity account book.')),
   ])));
