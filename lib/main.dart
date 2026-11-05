@@ -767,6 +767,7 @@ class _HomeShellState extends State<HomeShell> {
                 _drawerItem(Icons.inventory_2_rounded, labels[1], () => _selectTab(1)),
                 _drawerItem(Icons.bar_chart_rounded, labels[2], () => _selectTab(2)),
                 _drawerItem(Icons.today_rounded, labels[3], _openDailyReports),
+                _drawerItem(Icons.menu_book_rounded, lang == 'ur' ? 'ڈائری' : lang == 'hi' ? 'डायरी' : lang == 'zh' ? '日记' : 'Diary', () { _scaffoldKey.currentState?.closeDrawer(); Navigator.push(context, MaterialPageRoute(builder: (_) => DiaryScreen(language: lang))); }),
                 _drawerItem(Icons.swap_horiz_rounded, labels[4], _openMobileTransfer),
                 _drawerItem(Icons.settings_rounded, labels[5], () => _selectTab(3)),
                 const Spacer(),
@@ -1931,6 +1932,238 @@ class _MobileTransferScreenState extends State<MobileTransferScreen> {
 }
 
 
+
+
+class DiaryScreen extends StatefulWidget {
+  final String language;
+  const DiaryScreen({super.key, required this.language});
+
+  @override
+  State<DiaryScreen> createState() => _DiaryScreenState();
+}
+
+class _DiaryScreenState extends State<DiaryScreen> {
+  static const String _storageKey = 'wapari_diary_pages_v1';
+  static const List<Color> _paperColors = [
+    Color(0xFFFFFCF0),
+    Color(0xFFF2F8E9),
+    Color(0xFFFFF0F1),
+    Color(0xFFEFF5FF),
+    Color(0xFFF5F0FF),
+    Color(0xFFFFF4E5),
+  ];
+  final PageController _pageController = PageController();
+  List<Map<String, dynamic>> _pages = [];
+  int _currentPage = 0;
+  double _fontSize = 18;
+  bool _loading = true;
+
+  bool get _urdu => widget.language == 'ur';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPages();
+  }
+
+  Future<void> _loadPages() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_storageKey);
+    List<Map<String, dynamic>> loaded = [];
+    if (raw != null) {
+      try {
+        loaded = (jsonDecode(raw) as List)
+            .map((item) => Map<String, dynamic>.from(item as Map))
+            .toList();
+      } catch (_) {
+        loaded = [];
+      }
+    }
+    if (loaded.isEmpty) {
+      loaded = [
+        {'title': _urdu ? 'میری ڈائری' : 'My Diary', 'text': '', 'color': _paperColors.first.value}
+      ];
+    }
+    if (!mounted) return;
+    setState(() {
+      _pages = loaded;
+      _loading = false;
+    });
+    await _savePages();
+  }
+
+  Future<void> _savePages() async {
+    if (_pages.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_storageKey, jsonEncode(_pages));
+  }
+
+  void _updatePage(int index, String key, dynamic value) {
+    if (index < 0 || index >= _pages.length) return;
+    _pages[index][key] = value;
+    _savePages();
+  }
+
+  void _addPage() {
+    final next = _pages.length;
+    setState(() {
+      _pages.add({
+        'title': _urdu ? 'نیا صفحہ' : 'New page',
+        'text': '',
+        'color': _paperColors[next % _paperColors.length].value,
+      });
+      _currentPage = next;
+    });
+    _savePages();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_pageController.hasClients) {
+        _pageController.animateToPage(next, duration: const Duration(milliseconds: 350), curve: Curves.easeInOut);
+      }
+    });
+  }
+
+  void _changePage(int delta) {
+    final target = (_currentPage + delta).clamp(0, _pages.length - 1);
+    if (_pageController.hasClients) {
+      _pageController.animateToPage(target, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+    }
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final title = _urdu ? 'میری ڈائری' : widget.language == 'hi' ? 'मेरी डायरी' : widget.language == 'zh' ? '我的日记' : 'My Diary';
+    if (_loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    return Scaffold(
+      backgroundColor: kCream,
+      appBar: AppBar(
+        title: Text(title),
+        actions: [
+          IconButton(tooltip: _urdu ? 'چھوٹا متن' : 'Zoom out', onPressed: () => setState(() => _fontSize = (_fontSize - 1).clamp(12, 32)), icon: const Icon(Icons.zoom_out)),
+          Center(child: Text('${_fontSize.round()} ', style: const TextStyle(fontSize: 12))),
+          IconButton(tooltip: _urdu ? 'بڑا متن' : 'Zoom in', onPressed: () => setState(() => _fontSize = (_fontSize + 1).clamp(12, 32)), icon: const Icon(Icons.zoom_in)),
+          IconButton(tooltip: _urdu ? 'نیا صفحہ' : 'New page', onPressed: _addPage, icon: const Icon(Icons.note_add_outlined)),
+        ],
+      ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
+            child: Row(
+              children: [
+                IconButton(onPressed: () => _changePage(-1), icon: const Icon(Icons.chevron_left_rounded)),
+                Expanded(child: Text(
+                  _urdu ? 'صفحہ نمبر ${_currentPage + 1} / ${_pages.length}' : 'Page ${_currentPage + 1} of ${_pages.length}',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontWeight: FontWeight.w800, color: kDeepGreen),
+                )),
+                IconButton(onPressed: () => _changePage(1), icon: const Icon(Icons.chevron_right_rounded)),
+              ],
+            ),
+          ),
+          Expanded(
+            child: PageView.builder(
+              controller: _pageController,
+              itemCount: _pages.length,
+              onPageChanged: (index) => setState(() => _currentPage = index),
+              itemBuilder: (context, index) {
+                final page = _pages[index];
+                final colorValue = page['color'] is int ? page['color'] as int : _paperColors.first.value;
+                return Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 4, 14, 14),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Color(colorValue),
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: kGold, width: 1.5),
+                      boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 12, offset: Offset(0, 5))],
+                    ),
+                    child: Column(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(18, 12, 18, 4),
+                          child: TextFormField(
+                            key: ValueKey('diary-title-$index'),
+                            initialValue: page['title'] as String? ?? '',
+                            onChanged: (value) => _updatePage(index, 'title', value),
+                            textInputAction: TextInputAction.next,
+                            decoration: InputDecoration(
+                              hintText: _urdu ? 'صفحے کا عنوان لکھیں' : 'Write a page title',
+                              border: InputBorder.none,
+                              contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                            ),
+                            style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w900, color: kDeepGreen),
+                          ),
+                        ),
+                        const Divider(height: 1, indent: 18, endIndent: 18, color: Color(0x66B99A58)),
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(18, 8, 18, 12),
+                            child: TextFormField(
+                              key: ValueKey('diary-text-$index'),
+                              initialValue: page['text'] as String? ?? '',
+                              onChanged: (value) => _updatePage(index, 'text', value),
+                              keyboardType: TextInputType.multiline,
+                              textInputAction: TextInputAction.newline,
+                              minLines: null,
+                              maxLines: null,
+                              expands: true,
+                              textAlignVertical: TextAlignVertical.top,
+                              decoration: InputDecoration(
+                                hintText: _urdu ? 'یہاں اپنی ڈائری لکھیں...' : 'Start writing your diary here...',
+                                border: InputBorder.none,
+                                hintStyle: TextStyle(color: Colors.brown.withValues(alpha: 0.45)),
+                              ),
+                              style: TextStyle(fontSize: _fontSize, height: 1.65, color: kInk),
+                            ),
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+                          child: Row(
+                            children: [
+                              Text(_urdu ? 'صفحے کا رنگ' : 'Paper color', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                              const SizedBox(width: 8),
+                              ..._paperColors.map((color) => GestureDetector(
+                                onTap: () => setState(() {
+                                  _pages[index]['color'] = color.value;
+                                  _savePages();
+                                }),
+                                child: Container(
+                                  margin: const EdgeInsets.symmetric(horizontal: 3),
+                                  width: 25,
+                                  height: 25,
+                                  decoration: BoxDecoration(
+                                    color: color,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(color: colorValue == color.value ? kGreen : Colors.black26, width: colorValue == color.value ? 2.5 : 1),
+                                  ),
+                                ),
+                              )),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Text(_urdu ? 'صفحہ بدلنے کے لیے دائیں یا بائیں سوائپ کریں' : 'Swipe left or right to turn pages', style: const TextStyle(fontSize: 11, color: Colors.black54)),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class SettingsScreen extends StatelessWidget {
   final String language;
