@@ -116,6 +116,28 @@ jobs:
       - name: Install Flutter dependencies
         run: flutter pub get
 
+      # Maven Central returned HTTP 403 for the printing plugin's Android
+      # buildscript dependencies. Prefer Google's synchronized Central mirror,
+      # while keeping Maven Central as a fallback.
+      - name: Add Maven Central mirror for printing Android plugin
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import glob
+          matches = glob.glob(str(Path.home() / ".pub-cache/hosted/pub.dev/printing-*/android/build.gradle"))
+          if len(matches) != 1:
+              raise SystemExit(f"Expected exactly one resolved printing Android build file, found: {matches}")
+          path = Path(matches[0])
+          source = path.read_text()
+          original = "repositories {\\n        google()\\n        mavenCentral()\\n    }"
+          replacement = "repositories {\\n        google()\\n        maven { url \\\"https://maven-central.storage-download.googleapis.com/maven2/\\\" }\\n        mavenCentral()\\n    }"
+          count = source.count(original)
+          if count != 2:
+              raise SystemExit(f"Expected 2 printing repository blocks, found {count}; refusing to patch")
+          path.write_text(source.replace(original, replacement))
+          print(f"Configured Maven Central mirror in {path}")
+          PY
+
       - name: Format Dart source
         run: dart format lib test
 
