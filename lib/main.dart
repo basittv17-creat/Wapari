@@ -3,6 +3,10 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:nearby_connections/nearby_connections.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -1268,6 +1272,318 @@ class _ReportTile extends StatelessWidget {
   Widget build(BuildContext context) => Container(decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFFFFF2D0), Color(0xFFECCB81)]), borderRadius: BorderRadius.circular(17), border: Border.all(color: kGold), boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 5, offset: Offset(0, 3))]), child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(icon, color: kGreen, size: 32), Text(label, style: const TextStyle(fontWeight: FontWeight.w700)), Text(value, style: const TextStyle(fontSize: 18, color: kDeepGreen, fontWeight: FontWeight.w900))]));
 }
 
+
+class MobileTransferScreen extends StatefulWidget {
+  const MobileTransferScreen({super.key});
+  @override
+  State<MobileTransferScreen> createState() => _MobileTransferScreenState();
+}
+
+class _MobileTransferScreenState extends State<MobileTransferScreen> {
+  final Nearby _nearby = Nearby();
+  final Map<String, String> _devices = {};
+  String _status = 'ڈیٹا بھیجنے یا وصول کرنے کا انتخاب کریں۔';
+  String? _code;
+  String? _endpoint;
+  bool _connected = false;
+  bool _receiving = false;
+  bool _busy = false;
+  bool _scan = false;
+  static const _service = 'com.wapari.app.transfer';
+
+  Future<bool> _permissions() async {
+    final results = await <Permission>[
+      Permission.location,
+      Permission.bluetooth,
+      Permission.bluetoothAdvertise,
+      Permission.bluetoothConnect,
+      Permission.bluetoothScan,
+      Permission.nearbyWifiDevices,
+    ].request();
+    final denied = results.values.any((s) => s.isDenied || s.isPermanentlyDenied);
+    if (denied && mounted) setState(() => _status = 'Bluetooth، Nearby اور Location کی اجازت دیں۔');
+    return !denied;
+  }
+
+  Future<void> _stop() async {
+    try {
+      await _nearby.stopAllEndpoints();
+      await _nearby.stopAdvertising();
+      await _nearby.stopDiscovery();
+    } catch (_) {}
+    if (mounted) setState(() { _connected = false; _endpoint = null; });
+  }
+
+  void _connectionResult(String id, Status status) {
+    if (!mounted) return;
+    setState(() {
+      _connected = status == Status.CONNECTED;
+      _endpoint = _connected ? id : null;
+      _status = _connected ? 'دونوں موبائل منسلک ہو گئے۔' : 'کنکشن مکمل نہیں ہوا۔';
+    });
+  }
+
+  Future<void> _connectionInitiated(String id, ConnectionInfo info) async {
+    if (!mounted) return;
+    final accepted = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('کنکشن کی تصدیق'),
+        content: Text('ڈیوائس: ${info.endpointName}\nتصدیقی کوڈ: ${info.authenticationToken}\nدونوں موبائل پر یہی کوڈ دیکھ کر تصدیق کریں۔'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('انکار')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('منظور')),
+        ],
+      ),
+    );
+    if (accepted != true) {
+      await _nearby.rejectConnection(id);
+      return;
+    }
+    await _nearby.acceptConnection(id,
+      onPayLoadRecieved: (endpointId, payload) async {
+        if (payload.type != PayloadType.BYTES || payload.bytes == null) return;
+        try {
+          final result = await LocalStore.importBackup(utf8.decode(payload.bytes!));
+          if (!mounted) return;
+          setState(() => _status = result.duplicateBatch
+            ? 'یہ ڈیٹا پہلے منتقل ہو چکا ہے۔'
+            : 'منتقلی مکمل: نئے ${result.added}، اپ ڈیٹ ${result.updated}، بغیر تبدیلی ${result.unchanged}');
+        } catch (e) {
+          if (mounted) setState(() => _status = 'ڈیٹا درست نہیں یا درآمد ناکام: $e');
+        }
+      },
+      onPayloadTransferUpdate: (endpointId, update) {
+        if (mounted && update.status == PayloadStatus.IN_PROGRESS) {
+          setState(() => _status = 'ڈیٹا منتقل ہو رہا ہے: ${update.bytesTransferred} / ${update.totalBytes}');
+        }
+        if (mounted && update.status == PayloadStatus.SUCCESS) {
+          setState(() => _status = 'ڈیٹا دوسرے موبائل تک پہنچ گیا۔');
+        }
+      },
+    );
+  }
+
+  Future<void> _startSend() async {
+    if (!await _permissions()) return;
+    await _stop();
+    final code = (100000 + Random.secure().nextInt(900000)).toString();
+    setState(() { _code = code; _receiving = false; _busy = true; _devices.clear(); _status = 'QR دکھایا جا رہا ہے۔ دوسرے موبائل سے Scan کریں۔'; });
+    try {
+      await _nearby.startAdvertising('Wapari-$code', Strategy.P2P_CLUSTER,
+        serviceId: _service,
+        onConnectionInitiated: _connectionInitiated,
+        onConnectionResult: _connectionResult,
+        onDisconnected: (id) { if (mounted) setState(() { _connected = false; _endpoint = null; _status = 'کنکشن ختم ہو گیا۔'; }); },
+      );
+    } catch (e) {
+      if (mounted) setState(() => _status = 'Device تلاش کے لیے دستیاب نہیں: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _startReceive(String code) async {
+    if (!RegExp(r'^\d{6}
+  final String language;
+  final ValueChanged<String> onLanguageChanged;
+  const SettingsScreen({super.key, required this.language, required this.onLanguageChanged});
+  @override
+  Widget build(BuildContext context) => Directionality(textDirection: Txt.isRtl(language) ? TextDirection.rtl : TextDirection.ltr, child: Scaffold(appBar: AppBar(title: Text(Txt.get('settings', language))), body: ListView(padding: const EdgeInsets.all(14), children: [
+    _settingTile(context, Icons.language_rounded, Txt.get('language', language), language.toUpperCase(), () => showModalBottomSheet(context: context, backgroundColor: kCream, builder: (_) => SafeArea(child: Padding(padding: const EdgeInsets.all(14), child: Column(mainAxisSize: MainAxisSize.min, children: [for (final x in [('ur', 'اردو'), ('hi', 'हिन्दी'), ('en', 'English'), ('zh', '中文')]) ListTile(leading: const Icon(Icons.translate_rounded, color: kGreen), title: Text(x.$2), trailing: language == x.$1 ? const Icon(Icons.check_circle, color: kGreen) : null, onTap: () { Navigator.pop(context); onLanguageChanged(x.$1); })]))))),
+    _settingTile(context, Icons.cloud_download_rounded, Txt.get('backup', language), 'JSON', () async {
+      final action = await showModalBottomSheet<String>(
+        context: context,
+        backgroundColor: kCream,
+        builder: (sheetContext) => SafeArea(child: Wrap(children: [
+          ListTile(leading: const Icon(Icons.copy, color: kGreen), title: const Text('بیک اپ کاپی کریں / Copy backup'), onTap: () => Navigator.pop(sheetContext, 'export')),
+          ListTile(leading: const Icon(Icons.merge_type, color: kGreen), title: const Text('بیک اپ درآمد اور محفوظ Merge / Import backup'), onTap: () => Navigator.pop(sheetContext, 'import')),
+          ListTile(leading: const Icon(Icons.history, color: kGreen), title: const Text('Merge History'), onTap: () => Navigator.pop(sheetContext, 'history')),
+        ])),
+      );
+      if (action == 'export') {
+        final raw = const JsonEncoder.withIndent('  ').convert(await LocalStore.exportBackup());
+        await Clipboard.setData(ClipboardData(text: raw));
+        if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('بیک اپ کاپی ہو گیا')));
+      } else if (action == 'import') {
+        final controller = TextEditingController();
+        if (!context.mounted) return;
+        final raw = await showDialog<String>(context: context, builder: (dialogContext) => AlertDialog(
+          title: const Text('Import Wapari backup'),
+          content: TextField(controller: controller, minLines: 5, maxLines: 10, decoration: const InputDecoration(hintText: 'یہاں مکمل JSON بیک اپ پیسٹ کریں')),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.pop(dialogContext, controller.text), child: const Text('Continue')),
+          ],
+        ));
+        controller.dispose();
+        if (raw == null || raw.trim().isEmpty || !context.mounted) return;
+        try {
+          final result = await LocalStore.importBackup(raw);
+          if (!context.mounted) return;
+          final message = result.duplicateBatch
+              ? 'یہ بیک اپ پہلے درآمد ہو چکا ہے؛ کوئی ڈپلیکیٹ نہیں بنایا گیا۔'
+              : 'نئے: ${result.added}، اپ ڈیٹ: ${result.updated}، بغیر تبدیلی: ${result.unchanged}';
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), duration: const Duration(seconds: 5)));
+        } catch (error) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('بیک اپ درآمد نہیں ہو سکا: $error')));
+        }
+      } else if (action == 'history') {
+        if (!context.mounted) return;
+        final items = await LocalStore.loadMergeHistory();
+        if (!context.mounted) return;
+        await showDialog<void>(context: context, builder: (dialogContext) => AlertDialog(
+          title: const Text('Merge History'),
+          content: SizedBox(width: double.maxFinite, child: items.isEmpty
+              ? const Text('ابھی کوئی تبدیلی محفوظ نہیں ہوئی۔')
+              : ListView(shrinkWrap: true, children: items.reversed.take(50).map((item) {
+                  final oldValue = Map<String, dynamic>.from(item['old'] as Map);
+                  final newValue = Map<String, dynamic>.from(item['new'] as Map);
+                  return ListTile(
+                    title: Text('${item['accountName'] ?? 'Account'}'),
+                    subtitle: Text('بوریاں: ${oldValue['bagCount']} → ${newValue['bagCount']}\nوقت: ${item['changedAt']}'),
+                  );
+                }).toList())),
+          actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Close'))],
+        ));
+      }
+    }),
+    _settingTile(context, Icons.swap_horiz_rounded, 'موبائل سے موبائل ٹرانسفر', 'QR / Wi-Fi', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MobileTransferScreen()))),
+    _settingTile(context, Icons.phone_android_rounded, Txt.get('saved_on_device', language), 'Offline', () {}),
+    _settingTile(context, Icons.info_outline_rounded, language == 'ur' ? 'ایپ کے بارے میں' : 'About Wapari', 'Version 1.0.0', () => showAboutDialog(context: context, applicationName: 'Wapari', applicationVersion: '1.0.0', applicationLegalese: 'Offline-first commodity account book.')),
+  ])));
+
+  Widget _settingTile(BuildContext context, IconData icon, String title, String trailing, VoidCallback onTap) => Padding(padding: const EdgeInsets.only(bottom: 11), child: Material(elevation: 3, borderRadius: BorderRadius.circular(15), child: ListTile(onTap: onTap, tileColor: kPaper, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15), side: const BorderSide(color: Color(0xFFD8C49A))), leading: Icon(icon, color: kGreen, size: 28), title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)), trailing: Row(mainAxisSize: MainAxisSize.min, children: [Text(trailing, style: const TextStyle(fontSize: 12, color: Colors.black54)), const SizedBox(width: 5), const Icon(Icons.chevron_right_rounded)]))));
+}
+
+class _SectionTitle extends StatelessWidget {
+  final String text;
+  const _SectionTitle({required this.text});
+  @override
+  Widget build(BuildContext context) => Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9), decoration: BoxDecoration(gradient: const LinearGradient(colors: [kGreen, kDeepGreen]), borderRadius: BorderRadius.circular(11), boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2))]), child: Text(text, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900)));
+}
+
+class _InfoRow extends StatelessWidget {
+  final String label, value;
+  final bool highlight, gold;
+  const _InfoRow({required this.label, required this.value, this.highlight = false, this.gold = false});
+  @override
+  Widget build(BuildContext context) => Container(margin: const EdgeInsets.only(bottom: 4), padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7), decoration: BoxDecoration(color: gold ? const Color(0xFFFFE7A2) : highlight ? const Color(0xFFE5F0D4) : Colors.transparent, borderRadius: BorderRadius.circular(8)), child: Row(children: [Expanded(child: Text(label, style: TextStyle(fontWeight: highlight ? FontWeight.w900 : FontWeight.w600, fontSize: 13))), Text(value, style: TextStyle(fontWeight: FontWeight.w900, color: highlight ? kDeepGreen : kInk, fontSize: highlight ? 15 : 13))]));
+}
+
+class _GoldButton extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final VoidCallback? onTap;
+  const _GoldButton({required this.icon, required this.title, required this.onTap});
+  @override
+  Widget build(BuildContext context) => Material(elevation: 7, borderRadius: BorderRadius.circular(16), child: InkWell(onTap: onTap, borderRadius: BorderRadius.circular(16), child: Container(padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 15), decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFF0A783D), kDeepGreen]), borderRadius: BorderRadius.circular(16), border: Border.all(color: kGold, width: 2), boxShadow: const [BoxShadow(color: Colors.white24, blurRadius: 4, offset: Offset(-2, -2))]), child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(icon, color: Colors.white, size: 25), const SizedBox(width: 10), Text(title, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w900))]))));
+}
+).hasMatch(code)) {
+      setState(() => _status = 'QR کوڈ درست نہیں۔');
+      return;
+    }
+    if (!await _permissions()) return;
+    await _stop();
+    setState(() { _code = code; _receiving = true; _busy = true; _devices.clear(); _status = 'قریب موجود بھیجنے والے موبائل تلاش ہو رہے ہیں...'; });
+    try {
+      await _nearby.startDiscovery('Wapari-Receiver', Strategy.P2P_CLUSTER,
+        serviceId: _service,
+        onEndpointFound: (id, name, serviceId) {
+          if (serviceId == _service && name == 'Wapari-$code' && mounted) {
+            setState(() { _devices[id] = name; _status = 'ڈیوائس مل گئی۔ Connect دبائیں۔'; });
+          }
+        },
+        onEndpointLost: (id) { if (mounted) setState(() => _devices.remove(id)); },
+      );
+    } catch (e) {
+      if (mounted) setState(() => _status = 'ڈیوائس تلاش نہیں ہو سکی: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _connect(String id) async {
+    await _nearby.stopDiscovery();
+    try {
+      await _nearby.requestConnection('Wapari-Receiver', id,
+        onConnectionInitiated: _connectionInitiated,
+        onConnectionResult: _connectionResult,
+        onDisconnected: (endpointId) { if (mounted) setState(() { _connected = false; _endpoint = null; _status = 'کنکشن ختم ہو گیا۔'; }); },
+      );
+    } catch (e) {
+      if (mounted) setState(() => _status = 'کنکشن کی درخواست ناکام: $e');
+    }
+  }
+
+  Future<void> _sendData() async {
+    final endpoint = _endpoint;
+    if (!_connected || endpoint == null) return;
+    setState(() { _busy = true; _status = 'کھاتوں کا ڈیٹا بھیجا جا رہا ہے...'; });
+    try {
+      final backup = await LocalStore.exportBackup();
+      final bytes = Uint8List.fromList(utf8.encode(jsonEncode(backup)));
+      if (bytes.length > 1000000) throw Exception('ڈیٹا 1 MB سے زیادہ ہے؛ فی الحال اس سائز کی منتقلی دستیاب نہیں۔');
+      await _nearby.sendBytesPayload(endpoint, bytes);
+      if (mounted) setState(() => _status = 'ڈیٹا بھیجنے کی درخواست مکمل۔ وصولی کی تصدیق کا انتظار کریں۔');
+    } catch (e) {
+      if (mounted) setState(() => _status = 'ڈیٹا نہیں بھیجا جا سکا: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _nearby.stopAllEndpoints();
+    _nearby.stopAdvertising();
+    _nearby.stopDiscovery();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('موبائل سے موبائل ٹرانسفر')),
+    body: ListView(padding: const EdgeInsets.all(16), children: [
+      Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(children: [
+        const Icon(Icons.swap_horiz, size: 42, color: kGreen),
+        const SizedBox(height: 8),
+        Text(_status, textAlign: TextAlign.center),
+        if (_busy) const Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator()),
+      ]))),
+      const SizedBox(height: 12),
+      FilledButton.icon(onPressed: _busy ? null : _startSend, icon: const Icon(Icons.send), label: const Text('Send Data / ڈیٹا بھیجیں')),
+      const SizedBox(height: 8),
+      OutlinedButton.icon(onPressed: _busy ? null : () => setState(() => _scan = true), icon: const Icon(Icons.qr_code_scanner), label: const Text('Receive Data / QR Scan کریں')),
+      if (_code != null && !_receiving) ...[
+        const SizedBox(height: 14),
+        Center(child: QrImageView(data: _code!, size: 220, backgroundColor: Colors.white)),
+        Center(child: SelectableText('کوڈ: $_code', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold))),
+      ],
+      if (_scan) SizedBox(height: 300, child: MobileScanner(onDetect: (capture) {
+        final value = capture.barcodes.isEmpty ? null : capture.barcodes.first.rawValue;
+        if (value == null) return;
+        setState(() => _scan = false);
+        _startReceive(value);
+      })),
+      if (_devices.isNotEmpty) ...[
+        const SizedBox(height: 12),
+        const Text('تلاش شدہ ڈیوائسز', style: TextStyle(fontWeight: FontWeight.bold)),
+        for (final entry in _devices.entries)
+          Card(child: ListTile(leading: const Icon(Icons.phone_android), title: Text(entry.value), trailing: FilledButton(onPressed: () => _connect(entry.key), child: const Text('Connect')))),
+      ],
+      if (_connected && !_receiving) ...[
+        const SizedBox(height: 12),
+        FilledButton.icon(onPressed: _busy ? null : _sendData, icon: const Icon(Icons.upload), label: const Text('Send Account Data')),
+      ],
+      const SizedBox(height: 8),
+      OutlinedButton.icon(onPressed: _stop, icon: const Icon(Icons.link_off), label: const Text('کنکشن بند کریں')),
+      const Padding(padding: EdgeInsets.only(top: 12), child: Text('دونوں موبائل پر Bluetooth، Nearby اور ضرورت کے مطابق Location آن رکھیں۔', textAlign: TextAlign.center)),
+    ]),
+  );
+}
+
 class SettingsScreen extends StatelessWidget {
   final String language;
   final ValueChanged<String> onLanguageChanged;
@@ -1332,6 +1648,7 @@ class SettingsScreen extends StatelessWidget {
         ));
       }
     }),
+    _settingTile(context, Icons.swap_horiz_rounded, 'موبائل سے موبائل ٹرانسفر', 'QR / Wi-Fi', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MobileTransferScreen()))),
     _settingTile(context, Icons.phone_android_rounded, Txt.get('saved_on_device', language), 'Offline', () {}),
     _settingTile(context, Icons.info_outline_rounded, language == 'ur' ? 'ایپ کے بارے میں' : 'About Wapari', 'Version 1.0.0', () => showAboutDialog(context: context, applicationName: 'Wapari', applicationVersion: '1.0.0', applicationLegalese: 'Offline-first commodity account book.')),
   ])));

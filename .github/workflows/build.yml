@@ -46,6 +46,26 @@ jobs:
           test -f android/app/src/main/AndroidManifest.xml
           python3 - <<'PY'
           from pathlib import Path
+          p = Path("android/app/src/main/AndroidManifest.xml")
+          s = p.read_text()
+          perms = """
+              <uses-permission android:maxSdkVersion="31" android:name="android.permission.ACCESS_WIFI_STATE" />
+              <uses-permission android:maxSdkVersion="31" android:name="android.permission.CHANGE_WIFI_STATE" />
+              <uses-permission android:maxSdkVersion="30" android:name="android.permission.BLUETOOTH" />
+              <uses-permission android:maxSdkVersion="30" android:name="android.permission.BLUETOOTH_ADMIN" />
+              <uses-permission android:maxSdkVersion="28" android:name="android.permission.ACCESS_COARSE_LOCATION" />
+              <uses-permission android:minSdkVersion="29" android:maxSdkVersion="31" android:name="android.permission.ACCESS_FINE_LOCATION" />
+              <uses-permission android:minSdkVersion="31" android:name="android.permission.BLUETOOTH_ADVERTISE" />
+              <uses-permission android:minSdkVersion="31" android:name="android.permission.BLUETOOTH_CONNECT" />
+              <uses-permission android:minSdkVersion="31" android:name="android.permission.BLUETOOTH_SCAN" />
+              <uses-permission android:minSdkVersion="32" android:name="android.permission.NEARBY_WIFI_DEVICES" />
+          """
+          if "android.permission.BLUETOOTH_SCAN" not in s:
+              s = s.replace("<application", perms + "\\n        <application", 1)
+              p.write_text(s)
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
           manifest = Path("android/app/src/main/AndroidManifest.xml")
           content = manifest.read_text()
           marker = "<application"
