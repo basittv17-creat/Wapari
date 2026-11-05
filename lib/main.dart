@@ -1442,7 +1442,7 @@ class _MobileTransferScreenState extends State<MobileTransferScreen> {
   bool _busy = false;
   bool _scan = false;
 
-  static const String _service = 'com.wapari.app.transfer';
+  static const String _service = 'com.awasigogera.wapari.transfer';
 
   Future<bool> _permissions() async {
     final results = await <Permission>[

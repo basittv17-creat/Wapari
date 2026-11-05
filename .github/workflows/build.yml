@@ -38,7 +38,7 @@ jobs:
 
       - name: Generate Android platform files
         run: |
-          flutter create --project-name wapari --platforms=android --org com.wapari.app /tmp/wapari_scaffold
+          flutter create --project-name wapari --platforms=android --org com.awasigogera /tmp/wapari_scaffold
           cp -R /tmp/wapari_scaffold/android ./android
           test -f android/gradlew
           test -f android/app/build.gradle.kts -o -f android/app/build.gradle

@@ -18,12 +18,16 @@
 
 `web_preview/` میں ایک الگ HTML/CSS/JavaScript پری ویو موجود ہے۔ یہ GitHub Actions کے Android build کا حصہ نہیں ہے اور اس workflow میں ویب build نہیں چلتا۔
 
+## Android Package ID
+
+ایپ کا Android application ID / package name: `com.awasigogera.wapari`۔
+
 ## Android APK بنانا
 
 Flutter SDK انسٹال ہونے کے بعد پروجیکٹ فولڈر میں:
 
 ```bash
-flutter create --project-name wapari --platforms=android --org com.wapari.app /tmp/wapari_scaffold
+flutter create --project-name wapari --platforms=android --org com.awasigogera /tmp/wapari_scaffold
 cp -R /tmp/wapari_scaffold/android ./android
 flutter pub get
 flutter analyze
