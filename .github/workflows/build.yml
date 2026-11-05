@@ -133,6 +133,8 @@ jobs:
           arch: x86_64
           target: google_apis
           profile: pixel_2
+          emulator-boot-timeout: 900
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           disable-animations: true
           script: |
             set -euo pipefail
@@ -145,17 +147,20 @@ jobs:
             adb shell monkey -p "$PACKAGE_ID" -c android.intent.category.LAUNCHER 1
             sleep 15
 
-            # Read only Android's dedicated crash buffer. Never upload general logcat,
-            # screenshots, device details, or normal application logs.
+            # Keep only crash-buffer output and fatal Flutter/Android markers.
+            # General logcat, routine warnings, screenshots and device data are never uploaded.
             adb logcat -b crash -d -v threadtime > /tmp/wapari-crash-buffer.txt
-            if grep -E -i "FATAL EXCEPTION|Fatal signal [0-9]+|am_crash|Process: .*, PID:|backtrace:" /tmp/wapari-crash-buffer.txt >/dev/null; then
-              cp /tmp/wapari-crash-buffer.txt diagnostics/fatal-crash-logs.txt
-              echo "::error::Fatal crash detected. Only crash-buffer entries are included in the diagnostics artifact."
+            adb logcat -b main -d -v threadtime | grep -E -i "FATAL EXCEPTION|Fatal signal [0-9]+|Unhandled Exception|Exception caught by widgets library|E/flutter|am_crash|Process: .*, PID:|backtrace:" > /tmp/wapari-fatal-main-lines.txt || true
+            cat /tmp/wapari-crash-buffer.txt /tmp/wapari-fatal-main-lines.txt > /tmp/wapari-fatal-only.txt
+
+            if grep -E -i "FATAL EXCEPTION|Fatal signal [0-9]+|Unhandled Exception|Exception caught by widgets library|E/flutter|am_crash|Process: .*, PID:|backtrace:" /tmp/wapari-fatal-only.txt >/dev/null; then
+              cp /tmp/wapari-fatal-only.txt diagnostics/fatal-crash-logs.txt
+              echo "::error::Fatal app error detected. Only filtered fatal entries are included in the artifact."
               exit 1
             fi
 
             if ! adb shell pidof "$PACKAGE_ID" >/dev/null; then
-              echo "::error::Wapari process is not running after launch, but no fatal entry was found in Android's crash buffer."
+              echo "::error::Wapari process is not running after launch, but no fatal marker was captured."
               exit 1
             fi
             echo "Wapari remained running; no fatal crash entry was found."
