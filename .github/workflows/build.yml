@@ -165,12 +165,31 @@ jobs:
             fi
             echo "Wapari remained running; no fatal crash entry was found."
 
-      - name: Upload fatal crash logs only
+      - name: Create ZIP of fatal crash logs
+        if: always()
+        run: |
+          if [ -s diagnostics/fatal-crash-logs.txt ]; then
+            zip -j diagnostics/fatal-crash-logs.zip diagnostics/fatal-crash-logs.txt
+            unzip -l diagnostics/fatal-crash-logs.zip
+          else
+            echo "No fatal crash log file exists; ZIP will not be created."
+          fi
+
+      - name: Upload fatal crash log text
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: fatal-crash-logs
+          name: fatal-crash-logs-text
           path: diagnostics/fatal-crash-logs.txt
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Upload fatal crash logs ZIP
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fatal-crash-logs-zip
+          path: diagnostics/fatal-crash-logs.zip
           if-no-files-found: ignore
           retention-days: 7
 
