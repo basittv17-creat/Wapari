@@ -30,6 +30,25 @@ void main() {
     expect(account.totalPrice, 115500);
   });
 
+  test('daily reports include only accounts created within the last 24 hours', () {
+    final now = DateTime(2026, 11, 5, 12);
+    TradeAccount makeAccount(String id, DateTime createdAt) => TradeAccount(
+      id: id, name: id, fatherName: '', address: '', phone: '',
+      commodity: 'Wheat', bagWeightKg: 50, bagCount: 2, extraKg: 0,
+      rateMode: 'maund', rateValue: 4000, createdAt: createdAt,
+    );
+
+    final accounts = [
+      makeAccount('inside', now.subtract(const Duration(hours: 23))),
+      makeAccount('boundary', now.subtract(const Duration(hours: 24))),
+      makeAccount('old', now.subtract(const Duration(hours: 24, minutes: 1))),
+      makeAccount('future', now.add(const Duration(minutes: 1))),
+    ];
+
+    final result = accountsCreatedInLast24Hours(accounts, now: now);
+    expect(result.map((e) => e.id), ['inside', 'boundary']);
+  });
+
   test('maund rate is converted to the equivalent per kg rate', () {
     final account = TradeAccount(
       id: 'test-2',

@@ -399,6 +399,20 @@ class LocalStore {
   }
 }
 
+List<TradeAccount> accountsCreatedInLast24Hours(
+  List<TradeAccount> accounts, {
+  DateTime? now,
+}) {
+  final end = now ?? DateTime.now();
+  final start = end.subtract(const Duration(hours: 24));
+  return accounts
+      .where((account) =>
+          !account.createdAt.isBefore(start) &&
+          !account.createdAt.isAfter(end))
+      .toList()
+    ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+}
+
 String money(double value) {
   final fixed = value.toStringAsFixed(value % 1 == 0 ? 0 : 2);
   final parts = fixed.split('.');
@@ -1253,6 +1267,18 @@ class ReportsScreen extends StatelessWidget {
     final byCommodity = <String, double>{};
     for (final a in list) { byCommodity[a.commodity] = (byCommodity[a.commodity] ?? 0) + a.totalWeight; }
     return ListView(padding: const EdgeInsets.all(14), children: [
+      Card(
+        color: const Color(0xFFE5F0D4),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: const BorderSide(color: kGreen, width: 1.5)),
+        child: ListTile(
+          leading: const CircleAvatar(backgroundColor: kGreen, child: Icon(Icons.today_rounded, color: Colors.white)),
+          title: const Text('Daily Reports / روزانہ رپورٹ', style: TextStyle(fontWeight: FontWeight.w900, color: kDeepGreen)),
+          subtitle: const Text('گزشتہ 24 گھنٹوں میں بننے والے نئے کھاتے دیکھیں'),
+          trailing: const Icon(Icons.arrow_forward_ios_rounded, color: kGreen),
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DailyReportsScreen(language: language))),
+        ),
+      ),
+      const SizedBox(height: 12),
       GridView.count(shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), crossAxisCount: 2, childAspectRatio: 1.25, crossAxisSpacing: 10, mainAxisSpacing: 10, children: [
         _ReportTile(icon: Icons.groups_rounded, label: Txt.get('total_accounts', language), value: '${list.length}'),
         _ReportTile(icon: Icons.scale_rounded, label: Txt.get('total_goods', language), value: '${money(weight)} kg'),
@@ -1264,6 +1290,104 @@ class ReportsScreen extends StatelessWidget {
       if (list.isEmpty) Center(child: Padding(padding: const EdgeInsets.all(25), child: Text(Txt.get('no_accounts', language)))),
     ]);
   }))); 
+}
+
+class DailyReportsScreen extends StatelessWidget {
+  final String language;
+  const DailyReportsScreen({super.key, required this.language});
+
+  static const List<Color> _colors = [
+    Color(0xFFE3F2FD),
+    Color(0xFFFFE8D6),
+    Color(0xFFE8F5E9),
+    Color(0xFFF3E5F5),
+    Color(0xFFFFF3CD),
+    Color(0xFFDDF4F0),
+    Color(0xFFFCE4EC),
+  ];
+
+  @override
+  Widget build(BuildContext context) => Directionality(
+        textDirection: Txt.isRtl(language) ? TextDirection.rtl : TextDirection.ltr,
+        child: Scaffold(
+          appBar: AppBar(title: const Text('Daily Reports / روزانہ رپورٹ')),
+          body: FutureBuilder<List<TradeAccount>>(
+            future: LocalStore.loadAccounts(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              final now = DateTime.now();
+              final daily = accountsCreatedInLast24Hours(snapshot.data!, now: now);
+              if (daily.isEmpty) {
+                return const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Text(
+                      'گزشتہ 24 گھنٹوں میں کوئی نیا کھاتہ نہیں بنا۔',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                );
+              }
+              final totalAmount = daily.fold<double>(0, (sum, account) => sum + account.totalPrice);
+              return ListView(
+                padding: const EdgeInsets.all(14),
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(colors: [kGreen, kDeepGreen]),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Column(
+                      children: [
+                        Text('گزشتہ 24 گھنٹوں کے نئے کھاتے: ${daily.length}',
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 17)),
+                        const SizedBox(height: 5),
+                        Text('کل رقم: Rs ${money(totalAmount)}',
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  for (var i = 0; i < daily.length; i++)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.all(13),
+                      decoration: BoxDecoration(
+                        color: _colors[i % _colors.length],
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: kGreen.withValues(alpha: .35)),
+                        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(daily[i].name,
+                              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900, color: kDeepGreen)),
+                          if (daily[i].fatherName.trim().isNotEmpty)
+                            Text('ولدیت: ${daily[i].fatherName}', style: const TextStyle(fontWeight: FontWeight.w700)),
+                          if (daily[i].address.trim().isNotEmpty)
+                            Text('پتہ: ${daily[i].address}', style: const TextStyle(fontSize: 12, color: Colors.black87)),
+                          const Divider(height: 16),
+                          _InfoRow(label: 'اجناس', value: commodityLabel(daily[i].commodity, language)),
+                          _InfoRow(label: 'بوریوں کی تعداد', value: '${daily[i].bagCount}'),
+                          _InfoRow(label: 'کل وزن', value: '${money(daily[i].totalWeight / 40)} من (${money(daily[i].totalWeight)} کلو)'),
+                          _InfoRow(label: 'ریٹ فی من', value: 'Rs ${money(daily[i].maundRate)}'),
+                          _InfoRow(label: 'کل رقم', value: 'Rs ${money(daily[i].totalPrice)}', highlight: true, gold: true),
+                          Text('وقت: ${daily[i].createdAt.toLocal()}',
+                              style: const TextStyle(fontSize: 10, color: Colors.black54)),
+                        ],
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+        ),
+      );
 }
 
 class _ReportTile extends StatelessWidget {
