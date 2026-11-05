@@ -1921,27 +1921,3 @@ class SettingsScreen extends StatelessWidget {
 
   Widget _settingTile(BuildContext context, IconData icon, String title, String trailing, VoidCallback onTap) => Padding(padding: const EdgeInsets.only(bottom: 11), child: Material(elevation: 3, borderRadius: BorderRadius.circular(15), child: ListTile(onTap: onTap, tileColor: kPaper, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15), side: const BorderSide(color: Color(0xFFD8C49A))), leading: Icon(icon, color: kGreen, size: 28), title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)), trailing: Row(mainAxisSize: MainAxisSize.min, children: [Text(trailing, style: const TextStyle(fontSize: 12, color: Colors.black54)), const SizedBox(width: 5), const Icon(Icons.chevron_right_rounded)]))));
 }
-
-class _SectionTitle extends StatelessWidget {
-  final String text;
-  const _SectionTitle({required this.text});
-  @override
-  Widget build(BuildContext context) => Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9), decoration: BoxDecoration(gradient: const LinearGradient(colors: [kGreen, kDeepGreen]), borderRadius: BorderRadius.circular(11), boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2))]), child: Text(text, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900)));
-}
-
-class _InfoRow extends StatelessWidget {
-  final String label, value;
-  final bool highlight, gold;
-  const _InfoRow({required this.label, required this.value, this.highlight = false, this.gold = false});
-  @override
-  Widget build(BuildContext context) => Container(margin: const EdgeInsets.only(bottom: 4), padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7), decoration: BoxDecoration(color: gold ? const Color(0xFFFFE7A2) : highlight ? const Color(0xFFE5F0D4) : Colors.transparent, borderRadius: BorderRadius.circular(8)), child: Row(children: [Expanded(child: Text(label, style: TextStyle(fontWeight: highlight ? FontWeight.w900 : FontWeight.w600, fontSize: 13))), Text(value, style: TextStyle(fontWeight: FontWeight.w900, color: highlight ? kDeepGreen : kInk, fontSize: highlight ? 15 : 13))]));
-}
-
-class _GoldButton extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final VoidCallback? onTap;
-  const _GoldButton({required this.icon, required this.title, required this.onTap});
-  @override
-  Widget build(BuildContext context) => Material(elevation: 7, borderRadius: BorderRadius.circular(16), child: InkWell(onTap: onTap, borderRadius: BorderRadius.circular(16), child: Container(padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 15), decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFF0A783D), kDeepGreen]), borderRadius: BorderRadius.circular(16), border: Border.all(color: kGold, width: 2), boxShadow: const [BoxShadow(color: Colors.white24, blurRadius: 4, offset: Offset(-2, -2))]), child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(icon, color: Colors.white, size: 25), const SizedBox(width: 10), Text(title, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w900))]))));
-}
