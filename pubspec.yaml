@@ -26,3 +26,10 @@ flutter:
   assets:
     - assets/hero_farm.png
     - assets/grain_sacks.png
+  fonts:
+    - family: WapariUrdu
+      fonts:
+        - asset: assets/fonts/NotoNastaliqUrdu.ttf
+    - family: WapariHindi
+      fonts:
+        - asset: assets/fonts/NotoSansDevanagari.ttf
