@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:nearby_connections/nearby_connections.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -1532,6 +1533,26 @@ class _GoldButton extends StatelessWidget {
   Widget build(BuildContext context) => Material(elevation: 7, borderRadius: BorderRadius.circular(16), child: InkWell(onTap: onTap, borderRadius: BorderRadius.circular(16), child: Container(padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 15), decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFF0A783D), kDeepGreen]), borderRadius: BorderRadius.circular(16), border: Border.all(color: kGold, width: 2), boxShadow: const [BoxShadow(color: Colors.white24, blurRadius: 4, offset: Offset(-2, -2))]), child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(icon, color: Colors.white, size: 25), const SizedBox(width: 10), Text(title, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w900))]))));
 }
 
+const int _transferChunkSize = 600 * 1024;
+
+/// Splits large backups into Nearby byte payloads below the platform limit.
+List<Uint8List> createTransferChunks(Uint8List data, {String? transferId}) {
+  final id = transferId ?? DateTime.now().microsecondsSinceEpoch.toString();
+  final total = data.isEmpty ? 1 : (data.length / _transferChunkSize).ceil();
+  return List<Uint8List>.generate(total, (index) {
+    final start = index * _transferChunkSize;
+    final end = data.isEmpty ? 0 : (start + _transferChunkSize).clamp(0, data.length);
+    final envelope = jsonEncode({'type': 'wapari-transfer-chunk', 'transferId': id, 'index': index, 'total': total, 'data': base64Encode(data.sublist(start, end))});
+    return Uint8List.fromList(utf8.encode(envelope));
+  });
+}
+
+class _IncomingTransferAssembly {
+  final int total;
+  final Map<int, Uint8List> chunks = {};
+  _IncomingTransferAssembly(this.total);
+}
+
 class MobileTransferScreen extends StatefulWidget {
   const MobileTransferScreen({super.key});
 
@@ -1541,7 +1562,9 @@ class MobileTransferScreen extends StatefulWidget {
 
 class _MobileTransferScreenState extends State<MobileTransferScreen> {
   final Nearby _nearby = Nearby();
+  final TextEditingController _manualCodeController = TextEditingController();
   final Map<String, String> _devices = {};
+  final Map<String, _IncomingTransferAssembly> _incomingTransfers = {};
   String _status = 'ڈیٹا بھیجنے یا وصول کرنے کا انتخاب کریں۔';
   String? _code;
   String? _endpoint;
@@ -1553,19 +1576,25 @@ class _MobileTransferScreenState extends State<MobileTransferScreen> {
   static const String _service = 'com.awasigogera.wapari.transfer';
 
   Future<bool> _permissions() async {
-    final results = await <Permission>[
-      Permission.location,
-      Permission.bluetooth,
-      Permission.bluetoothAdvertise,
-      Permission.bluetoothConnect,
-      Permission.bluetoothScan,
-      Permission.nearbyWifiDevices,
-    ].request();
-    final denied = results.values.any((status) => status.isDenied || status.isPermanentlyDenied);
-    if (denied && mounted) {
-      setState(() => _status = 'Bluetooth، Nearby اور Location کی اجازت دیں۔');
+    final sdk = (await DeviceInfoPlugin().androidInfo).version.sdkInt;
+    final required = <Permission>[];
+    if (sdk <= 32) required.add(Permission.location);
+    if (sdk >= 31) required.addAll([Permission.bluetoothAdvertise, Permission.bluetoothConnect, Permission.bluetoothScan]);
+    if (sdk >= 33) required.add(Permission.nearbyWifiDevices);
+    if (required.isNotEmpty) {
+      final results = await required.toSet().toList().request();
+      final denied = results.values.any((status) => status.isDenied || status.isPermanentlyDenied || status.isRestricted);
+      if (denied) {
+        if (mounted) setState(() => _status = 'Nearby اور Bluetooth کی ضروری اجازتیں دیں۔');
+        return false;
+      }
     }
-    return !denied;
+    final locationService = await Permission.location.serviceStatus;
+    if (!locationService.isEnabled) {
+      if (mounted) setState(() => _status = 'موبائل کی Location / GPS سروس آن کریں، پھر دوبارہ کوشش کریں۔');
+      return false;
+    }
+    return true;
   }
 
   Future<void> _stop() async {
@@ -1589,6 +1618,42 @@ class _MobileTransferScreenState extends State<MobileTransferScreen> {
       _endpoint = _connected ? id : null;
       _status = _connected ? 'دونوں موبائل منسلک ہو گئے۔' : 'کنکشن مکمل نہیں ہوا۔';
     });
+  }
+
+  Future<void> _handleReceivedBytes(Uint8List bytes) async {
+    try {
+      final decoded = jsonDecode(utf8.decode(bytes));
+      if (decoded is Map<String, dynamic> && decoded['type'] == 'wapari-transfer-chunk') {
+        final id = decoded['transferId'] as String?;
+        final index = decoded['index'] as int?;
+        final total = decoded['total'] as int?;
+        final encoded = decoded['data'] as String?;
+        if (id == null || id.isEmpty || index == null || total == null || encoded == null || total < 1 || total > 100000 || index < 0 || index >= total) throw const FormatException('Invalid transfer chunk');
+        final assembly = _incomingTransfers.putIfAbsent(id, () => _IncomingTransferAssembly(total));
+        if (assembly.total != total) throw const FormatException('Transfer chunk count mismatch');
+        assembly.chunks.putIfAbsent(index, () => base64Decode(encoded));
+        if (mounted) setState(() => _status = 'ڈیٹا وصول ہو رہا ہے: ${assembly.chunks.length} / $total حصے');
+        if (assembly.chunks.length != total) return;
+        _incomingTransfers.remove(id);
+        final builder = BytesBuilder(copy: false);
+        for (var part = 0; part < total; part++) {
+          final chunk = assembly.chunks[part];
+          if (chunk == null) throw const FormatException('Transfer is incomplete');
+          builder.add(chunk);
+        }
+        await _importReceivedBackup(builder.takeBytes());
+      } else {
+        await _importReceivedBackup(bytes);
+      }
+    } catch (error) {
+      if (mounted) setState(() => _status = 'ڈیٹا درست نہیں یا درآمد ناکام: $error');
+    }
+  }
+
+  Future<void> _importReceivedBackup(Uint8List bytes) async {
+    final result = await LocalStore.importBackup(utf8.decode(bytes));
+    if (!mounted) return;
+    setState(() => _status = result.duplicateBatch ? 'یہ ڈیٹا پہلے منتقل ہو چکا ہے۔' : 'منتقلی مکمل: نئے ${result.added}، اپ ڈیٹ ${result.updated}، بغیر تبدیلی ${result.unchanged}');
   }
 
   Future<void> _connectionInitiated(String id, ConnectionInfo info) async {
@@ -1620,20 +1685,7 @@ class _MobileTransferScreenState extends State<MobileTransferScreen> {
     await _nearby.acceptConnection(
       id,
       onPayLoadRecieved: (endpointId, payload) async {
-        if (payload.type != PayloadType.BYTES || payload.bytes == null) return;
-        try {
-          final result = await LocalStore.importBackup(utf8.decode(payload.bytes!));
-          if (!mounted) return;
-          setState(() {
-            _status = result.duplicateBatch
-                ? 'یہ ڈیٹا پہلے منتقل ہو چکا ہے۔'
-                : 'منتقلی مکمل: نئے ${result.added}، اپ ڈیٹ ${result.updated}، بغیر تبدیلی ${result.unchanged}';
-          });
-        } catch (error) {
-          if (mounted) {
-            setState(() => _status = 'ڈیٹا درست نہیں یا درآمد ناکام: $error');
-          }
-        }
+        if (payload.type == PayloadType.BYTES && payload.bytes != null) await _handleReceivedBytes(payload.bytes!);
       },
       onPayloadTransferUpdate: (endpointId, update) {
         if (!mounted) return;
@@ -1750,13 +1802,12 @@ class _MobileTransferScreenState extends State<MobileTransferScreen> {
     try {
       final backup = await LocalStore.exportBackup();
       final bytes = Uint8List.fromList(utf8.encode(jsonEncode(backup)));
-      if (bytes.length > 1000000) {
-        throw Exception('ڈیٹا 1 MB سے زیادہ ہے؛ فی الحال اس سائز کی منتقلی دستیاب نہیں۔');
+      final chunks = createTransferChunks(bytes);
+      for (var index = 0; index < chunks.length; index++) {
+        await _nearby.sendBytesPayload(endpoint, chunks[index]);
+        if (mounted) setState(() => _status = 'ڈیٹا بھیجا جا رہا ہے: ${index + 1} / ${chunks.length} حصے');
       }
-      await _nearby.sendBytesPayload(endpoint, bytes);
-      if (mounted) {
-        setState(() => _status = 'ڈیٹا بھیجنے کی درخواست مکمل۔ وصولی کی تصدیق کا انتظار کریں۔');
-      }
+      if (mounted) setState(() => _status = 'تمام ڈیٹا بھیج دیا گیا۔ دوسرے موبائل پر وصولی مکمل ہونے کا انتظار کریں۔');
     } catch (error) {
       if (mounted) setState(() => _status = 'ڈیٹا نہیں بھیجا جا سکا: $error');
     } finally {
@@ -1766,6 +1817,7 @@ class _MobileTransferScreenState extends State<MobileTransferScreen> {
 
   @override
   void dispose() {
+    _manualCodeController.dispose();
     _nearby.stopAllEndpoints();
     _nearby.stopAdvertising();
     _nearby.stopDiscovery();
@@ -1807,6 +1859,12 @@ class _MobileTransferScreenState extends State<MobileTransferScreen> {
               icon: const Icon(Icons.qr_code_scanner),
               label: const Text('Receive Data / QR Scan کریں'),
             ),
+            const SizedBox(height: 12),
+            TextField(controller: _manualCodeController, keyboardType: TextInputType.number, maxLength: 6,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              decoration: const InputDecoration(labelText: 'چھ ہندسوں کا کوڈ خود لکھیں', hintText: 'مثلاً 123456', prefixIcon: Icon(Icons.password), counterText: '')),
+            FilledButton.tonalIcon(onPressed: _busy ? null : () => _startReceive(_manualCodeController.text.trim()),
+              icon: const Icon(Icons.link), label: const Text('کوڈ سے کنکشن بنائیں')),
             if (_code != null && !_receiving) ...[
               const SizedBox(height: 14),
               Center(
