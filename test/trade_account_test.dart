@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -70,7 +71,21 @@ void main() {
     expect(account.totalPrice, 700);
   });
 
-  test('backup merge updates matching ID, preserves other accounts and is idempotent', () async {
+  test('large transfer payload is split below one MB and can be reassembled', () {
+    final original = Uint8List.fromList(List<int>.generate(1600000, (i) => i % 251));
+    final chunks = createTransferChunks(original, transferId: 'test-transfer');
+    expect(chunks.length, greaterThan(1));
+    expect(chunks.every((chunk) => chunk.length < 1000000), isTrue);
+    final restored = BytesBuilder(copy: false);
+    for (final chunk in chunks) {
+      final envelope = jsonDecode(utf8.decode(chunk)) as Map<String, dynamic>;
+      expect(envelope['transferId'], 'test-transfer');
+      restored.add(base64Decode(envelope['data'] as String));
+    }
+    expect(restored.takeBytes(), original);
+  });
+
+  test('backup merge updates matching ID, adds new accounts, preserves receiver accounts and is idempotent', () async {
     SharedPreferences.setMockInitialValues({});
     final original = TradeAccount(
       id: 'same-id', name: 'Ali', fatherName: '', address: '', phone: '',
@@ -89,19 +104,22 @@ void main() {
       commodity: 'Wheat', bagWeightKg: 50, bagCount: 15, extraKg: 0,
       rateMode: 'kg', rateValue: 100, createdAt: DateTime(2026, 11, 4),
     );
+    final added = TradeAccount(id: 'sender-new', name: 'New sender account', fatherName: '', address: '', phone: '', commodity: 'Corn', bagWeightKg: 40, bagCount: 5, extraKg: 0, rateMode: 'kg', rateValue: 90, createdAt: DateTime(2026, 11, 5));
     final backup = jsonEncode({
       'format': 'wapari-backup', 'version': 1, 'batchId': 'batch-1',
       'exportedAt': DateTime(2026, 11, 5).toIso8601String(),
-      'accounts': [newer.toJson()],
+      'accounts': [newer.toJson(), added.toJson()],
     });
     final first = await LocalStore.importBackup(backup);
     expect(first.updated, 1);
+    expect(first.added, 1);
     expect((await LocalStore.loadAccounts()).firstWhere((e) => e.id == 'same-id').bagCount, 15);
     expect((await LocalStore.loadAccounts()).any((e) => e.id == 'receiver-only'), isTrue);
+    expect((await LocalStore.loadAccounts()).any((e) => e.id == 'sender-new'), isTrue);
     expect((await LocalStore.loadMergeHistory()).length, 1);
     final second = await LocalStore.importBackup(backup);
     expect(second.duplicateBatch, isTrue);
-    expect((await LocalStore.loadAccounts()).length, 2);
+    expect((await LocalStore.loadAccounts()).length, 3);
   });
 
 }
