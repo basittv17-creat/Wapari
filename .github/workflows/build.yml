@@ -160,7 +160,7 @@ jobs:
           profile: pixel_2
           emulator-boot-timeout: 900
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
-          disable-animations: true
+          disable-animations: false
           script: bash .github/scripts/android-emulator-smoke-test.sh
 
       - name: Create ZIP of fatal crash logs
