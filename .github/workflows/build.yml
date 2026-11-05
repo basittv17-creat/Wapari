@@ -148,8 +148,93 @@ jobs:
       - name: Run Flutter tests
         run: flutter test --reporter expanded
 
+      - name: Configure Android release signing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          test -n "$ANDROID_KEYSTORE_BASE64"
+          test -n "$ANDROID_KEYSTORE_PASSWORD"
+          test -n "$ANDROID_KEY_ALIAS"
+          test -n "$ANDROID_KEY_PASSWORD"
+          mkdir -p android/app
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/upload-keystore.p12
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          props = {
+              "storePassword": os.environ["ANDROID_KEYSTORE_PASSWORD"],
+              "keyPassword": os.environ["ANDROID_KEY_PASSWORD"],
+              "keyAlias": os.environ["ANDROID_KEY_ALIAS"],
+              "storeFile": "upload-keystore.p12",
+          }
+          Path("android/key.properties").write_text("".join(f"{key}={value}\\n" for key, value in props.items()))
+          gradle = Path("android/app/build.gradle.kts")
+          if not gradle.exists():
+              raise SystemExit("Expected generated android/app/build.gradle.kts; refusing to guess signing syntax")
+          source = gradle.read_text()
+          if "signingConfigs {" not in source:
+              source = source.replace("buildTypes {", """signingConfigs {
+                  create("release") {
+                      keyAlias = keystoreProperties["keyAlias"] as String
+                      keyPassword = keystoreProperties["keyPassword"] as String
+                      storeFile = file(keystoreProperties["storeFile"] as String)
+                      storePassword = keystoreProperties["storePassword"] as String
+                      storeType = "pkcs12"
+                  }
+              }
+          
+              buildTypes {""", 1)
+          if "val keystoreProperties = Properties()" not in source:
+              imports = "import java.util.Properties\\n"
+              source = imports + source
+              anchor = "android {"
+              config = """val keystoreProperties = Properties()
+          val keystorePropertiesFile = rootProject.file("key.properties")
+          require(keystorePropertiesFile.exists()) { "Android signing key.properties is missing" }
+          keystoreProperties.load(keystorePropertiesFile.inputStream())
+          
+          """
+              source = source.replace(anchor, config + anchor, 1)
+          if 'signingConfig = signingConfigs.getByName("release")' not in source:
+              source = source.replace('signingConfig = signingConfigs.getByName("debug")', 'signingConfig = signingConfigs.getByName("release")', 1)
+          if 'signingConfig = signingConfigs.getByName("release")' not in source:
+              raise SystemExit("Could not attach release signing config to the release build type")
+          gradle.write_text(source)
+          print("Release signing configured; secret values were not printed.")
+          PY
+          keytool -list -keystore android/app/upload-keystore.p12 -storetype PKCS12 -alias "$ANDROID_KEY_ALIAS" -storepass "$ANDROID_KEYSTORE_PASSWORD" >/dev/null
+          chmod 600 android/key.properties android/app/upload-keystore.p12
+
       - name: Build Android release APK only
         run: flutter build apk --release --dart-define=ADMOB_TEST_ADS=true
+
+      - name: Build signed Android App Bundle with production ads
+        run: flutter build appbundle --release
+
+      - name: Verify signed AAB
+        run: |
+          AAB="build/app/outputs/bundle/release/app-release.aab"
+          test -s "$AAB"
+          jarsigner -verify -verbose -certs "$AAB" >/tmp/aab-signature-check.txt
+          grep -q "jar verified" /tmp/aab-signature-check.txt
+          echo "Signed AAB verification passed."
+
+      - name: Package signed AAB
+        run: |
+          mkdir -p dist
+          zip -j dist/wapari-signed-aab.zip build/app/outputs/bundle/release/app-release.aab
+          unzip -l dist/wapari-signed-aab.zip
+
+      - name: Upload signed AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wapari-signed-aab
+          path: dist/wapari-signed-aab.zip
+          if-no-files-found: error
+          retention-days: 14
 
       # Save dependency downloads before freeing disk space for the emulator.
       - name: Save Gradle dependency cache
