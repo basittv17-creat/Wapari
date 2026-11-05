@@ -116,6 +116,16 @@ jobs:
           echo "APK application ID: $PACKAGE_ID"
           test "$PACKAGE_ID" = "com.awasigogera.wapari"
 
+      - name: Free disk space for Android emulator
+        run: |
+          echo "Disk space before cleanup:"
+          df -h /
+          # These build-only toolchains are no longer needed after the APK is built.
+          rm -rf "$ANDROID_HOME/ndk" "$ANDROID_HOME/cmake"
+          rm -rf "$HOME/.gradle/caches" "$HOME/.gradle/daemon" "$HOME/.pub-cache"
+          echo "Disk space after cleanup:"
+          df -h /
+
       - name: Android emulator launch and crash-log test
         uses: reactivecircus/android-emulator-runner@v2
         with:
