@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -12,8 +14,13 @@ const Color kCream = Color(0xFFFFF7E8);
 const Color kPaper = Color(0xFFFFFCF5);
 const Color kInk = Color(0xFF25231D);
 
+const String kWapariBannerAdUnitId = 'ca-app-pub-9214971554658897/3537947338';
+const String kGoogleTestBannerAdUnitId = 'ca-app-pub-3940256099942544/9214589741';
+const bool kUseAdMobTestAds = bool.fromEnvironment('ADMOB_TEST_ADS', defaultValue: false);
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  unawaited(MobileAds.instance.initialize());
   runApp(const WapariApp());
 }
 
@@ -64,6 +71,15 @@ class _WapariAppState extends State<WapariApp> {
       title: 'Wapari - واپاری',
       debugShowCheckedModeBanner: false,
       theme: _theme(),
+      builder: (context, child) {
+        final showBanner = !_showSplash && _language != null;
+        return Column(
+          children: [
+            if (showBanner) const _TopBannerAd(),
+            Expanded(child: child ?? const SizedBox.shrink()),
+          ],
+        );
+      },
       home: _showSplash
           ? SplashScreen(onDone: () => setState(() => _showSplash = false))
           : _language == null
@@ -470,6 +486,74 @@ class _LanguageTile extends StatelessWidget {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TopBannerAd extends StatefulWidget {
+  const _TopBannerAd();
+
+  @override
+  State<_TopBannerAd> createState() => _TopBannerAdState();
+}
+
+class _TopBannerAdState extends State<_TopBannerAd> {
+  BannerAd? _bannerAd;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBanner();
+  }
+
+  void _loadBanner() {
+    final ad = BannerAd(
+      adUnitId: kUseAdMobTestAds
+          ? kGoogleTestBannerAdUnitId
+          : kWapariBannerAdUnitId,
+      size: AdSize.banner,
+      request: const AdRequest(),
+      listener: BannerAdListener(
+        onAdLoaded: (ad) {
+          if (!mounted) {
+            ad.dispose();
+            return;
+          }
+          setState(() => _bannerAd = ad as BannerAd);
+        },
+        onAdFailedToLoad: (ad, error) {
+          debugPrint('Wapari top banner failed to load: $error');
+          ad.dispose();
+        },
+      ),
+    );
+    ad.load();
+  }
+
+  @override
+  void dispose() {
+    _bannerAd?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ad = _bannerAd;
+    if (ad == null) return const SizedBox.shrink();
+
+    return SafeArea(
+      bottom: false,
+      child: Container(
+        width: double.infinity,
+        alignment: Alignment.center,
+        color: Colors.white,
+        height: ad.size.height.toDouble(),
+        child: SizedBox(
+          width: ad.size.width.toDouble(),
+          height: ad.size.height.toDouble(),
+          child: AdWidget(ad: ad),
         ),
       ),
     );
