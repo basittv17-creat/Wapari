@@ -162,7 +162,7 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           disable-animations: true
           script: |
-            set -euo pipefail
+            set -eu
             mkdir -p diagnostics
             APK="build/app/outputs/flutter-apk/app-release.apk"
             PACKAGE_ID="com.awasigogera.wapari"
