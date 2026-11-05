@@ -129,8 +129,15 @@ jobs:
               raise SystemExit(f"Expected exactly one resolved printing Android build file, found: {matches}")
           path = Path(matches[0])
           source = path.read_text()
-          original = "repositories {\\n        google()\\n        mavenCentral()\\n    }"
-          replacement = "repositories {\\n        google()\\n        maven { url \\\"https://maven-central.storage-download.googleapis.com/maven2/\\\" }\\n        mavenCentral()\\n    }"
+          original = """repositories {
+                  google()
+                  mavenCentral()
+              }"""
+          replacement = """repositories {
+                  google()
+                  maven { url "https://maven-central.storage-download.googleapis.com/maven2/" }
+                  mavenCentral()
+              }"""
           count = source.count(original)
           if count != 2:
               raise SystemExit(f"Expected 2 printing repository blocks, found {count}; refusing to patch")
