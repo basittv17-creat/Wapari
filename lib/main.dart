@@ -2044,9 +2044,9 @@ class _DiaryScreenState extends State<DiaryScreen> {
       appBar: AppBar(
         title: Text(title),
         actions: [
-          IconButton(tooltip: _urdu ? 'چھوٹا متن' : 'Zoom out', onPressed: () => setState(() => _fontSize = (_fontSize - 1).clamp(12, 32)), icon: const Icon(Icons.zoom_out)),
+          IconButton(tooltip: _urdu ? 'چھوٹا متن' : 'Zoom out', onPressed: () => setState(() => _fontSize = (_fontSize - 1).clamp(12, 32).toDouble()), icon: const Icon(Icons.zoom_out)),
           Center(child: Text('${_fontSize.round()} ', style: const TextStyle(fontSize: 12))),
-          IconButton(tooltip: _urdu ? 'بڑا متن' : 'Zoom in', onPressed: () => setState(() => _fontSize = (_fontSize + 1).clamp(12, 32)), icon: const Icon(Icons.zoom_in)),
+          IconButton(tooltip: _urdu ? 'بڑا متن' : 'Zoom in', onPressed: () => setState(() => _fontSize = (_fontSize + 1).clamp(12, 32).toDouble()), icon: const Icon(Icons.zoom_in)),
           IconButton(tooltip: _urdu ? 'نیا صفحہ' : 'New page', onPressed: _addPage, icon: const Icon(Icons.note_add_outlined)),
         ],
       ),
