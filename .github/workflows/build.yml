@@ -107,6 +107,55 @@ jobs:
       - name: Build Android release APK only
         run: flutter build apk --release --dart-define=ADMOB_TEST_ADS=true
 
+      - name: Verify APK application ID
+        run: |
+          APK="build/app/outputs/flutter-apk/app-release.apk"
+          AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)"
+          test -n "$AAPT"
+          PACKAGE_ID="$("$AAPT" dump badging "$APK" | sed -n "s/^package: name='\\([^']*\\)'.*/\\1/p")"
+          echo "APK application ID: $PACKAGE_ID"
+          test "$PACKAGE_ID" = "com.awasigogera.wapari"
+
+      - name: Android emulator launch and crash-log test
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_2
+          disable-animations: true
+          script: |
+            set -euo pipefail
+            mkdir -p diagnostics
+            APK="build/app/outputs/flutter-apk/app-release.apk"
+            PACKAGE_ID="com.awasigogera.wapari"
+            adb wait-for-device
+            adb install -r "$APK"
+            adb logcat -c
+            adb shell monkey -p "$PACKAGE_ID" -c android.intent.category.LAUNCHER 1
+            sleep 15
+            adb logcat -d -v threadtime > diagnostics/android-runtime-logcat.txt
+            adb shell screencap -p /sdcard/wapari-startup.png
+            adb pull /sdcard/wapari-startup.png diagnostics/wapari-startup.png
+            if grep -E -i "FATAL EXCEPTION|Fatal signal [0-9]+|Unhandled Exception|Exception caught by widgets library|am_crash" diagnostics/android-runtime-logcat.txt; then
+              echo "::error::Wapari crashed during emulator startup. See android-runtime-diagnostics artifact."
+              exit 1
+            fi
+            if ! adb shell pidof "$PACKAGE_ID" >/dev/null; then
+              echo "::error::Wapari process is not running after launch. See android-runtime-diagnostics artifact."
+              exit 1
+            fi
+            echo "Wapari remained running after startup; no fatal crash markers found."
+
+      - name: Upload Android runtime diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-runtime-diagnostics
+          path: diagnostics/
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Verify and package APK
         run: |
           test -s build/app/outputs/flutter-apk/app-release.apk
